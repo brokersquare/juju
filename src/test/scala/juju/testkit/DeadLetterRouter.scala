@@ -1,4 +1,4 @@
-package juju
+package juju.testkit
 
 import akka.actor.{Actor, ActorRef, DeadLetter, Props}
 
@@ -17,7 +17,7 @@ class DeadLetterRouter(receiver: ActorRef) extends Actor {
   }
 
   override def receive: Receive = {
-    case DeadLetter(m, _, _) => receiver.tell(m, sender)
+    case DeadLetter(m, _, _) => receiver.tell(m, sender())
     case _ => throw new Exception("Received unexpected message")
   }
 }
