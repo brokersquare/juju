@@ -2,11 +2,11 @@ package juju.domain
 
 import akka.actor._
 import akka.pattern.gracefulStop
-import juju.DomainSpec
 import juju.sample.ColorAggregate.ChangeWeight
 import juju.sample.ColorPriorityAggregate.ColorAssigned
 import juju.sample.PriorityActivitiesSaga
 import juju.sample.PriorityAggregate.PriorityIncreased
+import juju.testkit.DomainSpec
 
 import scala.concurrent.Await
 import scala.concurrent.duration._

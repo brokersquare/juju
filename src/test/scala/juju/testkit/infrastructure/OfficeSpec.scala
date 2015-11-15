@@ -1,16 +1,15 @@
-package juju.infrastructure
+package juju.testkit.infrastructure
 
 import akka.actor._
-import juju.DomainSpec
 import juju.infrastructure.Office._
-import juju.infrastructure.local.LocalEventBus
 import juju.infrastructure.local.LocalEventBus._
 import juju.sample.PriorityAggregate
 import juju.sample.PriorityAggregate.{CreatePriority, IncreasePriority, PriorityCreated, PriorityIncreased}
+import juju.testkit.DomainSpec
 
 import scala.concurrent.duration._
 
-class OfficeSpec extends DomainSpec("Office") {
+abstract class OfficeSpec(prefix:String) extends DomainSpec(s"${prefix}Office") {
   it should "be able to create the aggregate from the command" in {
     val officeRef = office[PriorityAggregate]
     system.eventStream.subscribe(this.testActor, classOf[PriorityCreated])

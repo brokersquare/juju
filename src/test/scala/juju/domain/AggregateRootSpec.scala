@@ -1,9 +1,9 @@
 package juju.domain
 
 import akka.actor._
-import juju.DomainSpec
 import juju.sample.PriorityAggregate
 import juju.sample.PriorityAggregate.{PriorityIncreased, IncreasePriority, PriorityCreated, CreatePriority}
+import juju.testkit.DomainSpec
 
 class AggregateRootSpec extends DomainSpec("AggregateRoot") {
 
