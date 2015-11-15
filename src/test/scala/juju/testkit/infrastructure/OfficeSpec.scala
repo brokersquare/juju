@@ -1,6 +1,7 @@
 package juju.testkit.infrastructure
 
 import akka.actor._
+import juju.infrastructure.Node
 import juju.infrastructure.Office._
 import juju.sample.PriorityAggregate
 import juju.sample.PriorityAggregate.{CreatePriority, IncreasePriority, PriorityCreated, PriorityIncreased}
@@ -8,7 +9,7 @@ import juju.testkit.DomainSpec
 
 import scala.concurrent.duration._
 
-abstract class OfficeSpec(prefix:String) extends DomainSpec(s"${prefix}Office") with UsingEventBus {
+abstract class OfficeSpec(prefix:String) extends DomainSpec(s"${prefix}Office") with Node {
     protected def subscribeDomainEvents()
 
   it should "be able to create the aggregate from the command" in {

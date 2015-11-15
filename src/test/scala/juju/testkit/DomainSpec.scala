@@ -2,11 +2,12 @@ package juju.testkit
 
 import java.util.{Calendar, Date}
 
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{PoisonPill, ActorRef, ActorSystem, Props}
 import akka.pattern.gracefulStop
 import akka.testkit._
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.LazyLogging
+import juju.infrastructure.EventBus
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers, TryValues}
 
 import scala.concurrent.duration._
@@ -53,5 +54,22 @@ class DomainSpec(test: String,  config: Config = ConfigFactory.load("domain.conf
     action(sutRef)
     gracefulStop(sutRef, 5 seconds)
     gracefulStop(this.testActor, 5 seconds)
+  }
+
+  protected def withEventBus(action : ActorRef => Unit) = {
+    system.eventStream.unsubscribe(this.testActor)
+    var router : ActorRef = null
+    var busRef: ActorRef = null
+
+    try {
+      router = system.actorOf(DeadLetterRouter.props(this.testActor))
+      busRef = system.actorOf(EventBus.props())
+      action(busRef)
+    } finally {
+      system.eventStream.unsubscribe(this.testActor)
+
+      if (router != null) router ! PoisonPill
+      if (busRef != null) busRef ! PoisonPill
+    }
   }
 }

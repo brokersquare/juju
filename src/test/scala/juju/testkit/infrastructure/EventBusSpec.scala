@@ -11,7 +11,7 @@ import juju.testkit.DomainSpec
 import scala.language.existentials
 
 
-abstract class EventBusSpec(prefix:String) extends DomainSpec(s"${prefix}EventBus") with UsingEventBus {
+abstract class EventBusSpec(prefix:String) extends DomainSpec(s"${prefix}EventBus") with Node {
 
   it should "be able to register handlers" in {
     withEventBus { busRef =>

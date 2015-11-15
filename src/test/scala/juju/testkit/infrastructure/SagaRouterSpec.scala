@@ -4,7 +4,7 @@ import akka.actor.Status.Success
 import akka.actor._
 import akka.pattern.gracefulStop
 import juju.infrastructure.SagaRouter._
-import juju.infrastructure.UpdateHandlers
+import juju.infrastructure.{Node, UpdateHandlers}
 import juju.sample.ColorAggregate.ChangeWeight
 import juju.sample.ColorPriorityAggregate.ColorAssigned
 import juju.sample.PriorityActivitiesSaga
@@ -14,7 +14,7 @@ import juju.testkit.DomainSpec
 
 import scala.concurrent.duration._
 
-abstract class SagaRouterSpec(prefix:String) extends DomainSpec(s"${prefix}SagaRouter") with UsingEventBus {
+abstract class SagaRouterSpec(prefix:String) extends DomainSpec(s"${prefix}SagaRouter") with Node {
   it should "be able to start the saga due to events and receive an emitted command" in {
     val routerRef = router[PriorityActivitiesSaga]
     routerRef ! UpdateHandlers(Map.empty + (classOf[ChangeWeight] -> this.testActor))
