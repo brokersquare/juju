@@ -1,17 +1,15 @@
 package juju.testkit.infrastructure
 
-import akka.actor._
 import juju.infrastructure._
 import juju.sample.ColorAggregate.WeightChanged
-import juju.sample.ColorPriorityAggregate.{AssignColor, ColorAssigned}
-import juju.sample.PriorityAggregate._
+import juju.sample.ColorPriorityAggregate.{ColorAssigned, AssignColor}
 import juju.sample.{ColorAggregate, ColorPriorityAggregate, PriorityActivitiesSaga, PriorityAggregate}
-import juju.testkit.DomainSpec
+import juju.sample.PriorityAggregate._
+import juju.testkit.AkkaSpec
 
 import scala.language.existentials
 
-
-abstract class EventBusSpec(prefix:String) extends DomainSpec(s"${prefix}EventBus") with Node {
+trait EventBusSpec extends AkkaSpec {
 
   it should "be able to register handlers" in {
     withEventBus { busRef =>

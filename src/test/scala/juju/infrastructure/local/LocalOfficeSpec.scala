@@ -1,10 +1,10 @@
-package juju.infrastructure
+package juju.infrastructure.local
 
-import juju.infrastructure.local.LocalNode
-import juju.sample.PriorityAggregate.{PriorityIncreased, PriorityCreated}
+import juju.sample.PriorityAggregate.{PriorityCreated, PriorityIncreased}
+import juju.testkit.LocalDomainSpec
 import juju.testkit.infrastructure.OfficeSpec
 
-class LocalOfficeSpec extends OfficeSpec("Local") with LocalNode {
+class LocalOfficeSpec extends LocalDomainSpec("LocalOffice") with OfficeSpec {
   override protected def subscribeDomainEvents(): Unit = {
     system.eventStream.subscribe(this.testActor, classOf[PriorityCreated])
     system.eventStream.subscribe(this.testActor, classOf[PriorityIncreased])

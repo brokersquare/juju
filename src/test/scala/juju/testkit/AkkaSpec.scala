@@ -1,24 +1,20 @@
 package juju.testkit
-
+import akka.pattern.gracefulStop
 import java.util.{Calendar, Date}
 
-import akka.actor.{PoisonPill, ActorRef, ActorSystem, Props}
-import akka.pattern.gracefulStop
-import akka.testkit._
-import com.typesafe.config.{Config, ConfigFactory}
+import akka.actor.{PoisonPill, Props, ActorRef, ActorSystem}
+import akka.testkit.{TestProbe, ImplicitSender, DefaultTimeout, TestKitBase}
+import com.typesafe.config.Config
 import com.typesafe.scalalogging.LazyLogging
-import juju.infrastructure.EventBus
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers, TryValues}
-
+import juju.infrastructure.{Node, EventBus}
+import org.scalatest.{TryValues, Matchers, BeforeAndAfterAll, FlatSpecLike}
 import scala.concurrent.duration._
 
-class DomainSpec(test: String,  config: Config = ConfigFactory.load("domain.conf"))
-  extends { implicit val system = ActorSystem(test, config) }
-  with TestKitBase
+trait AkkaSpec extends TestKitBase
   with FlatSpecLike with Matchers with BeforeAndAfterAll with LazyLogging with TryValues
-  with DefaultTimeout with ImplicitSender
-{
-  behavior of test      //this will print the behavior of the test
+  with DefaultTimeout with ImplicitSender with Node {
+  val config : Config
+  implicit val system : ActorSystem
 
   override def beforeAll() = {
     System.setProperty("java.net.preferIPv4Stack", "true") //TODO: move property declaration to the build.sbt

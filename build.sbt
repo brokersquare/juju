@@ -22,6 +22,10 @@ libraryDependencies ++= {
     "com.github.jdgoldie" %% "akka-persistence-shared-inmemory" % AkkaPersistenceInMemory intransitive(),
     "com.typesafe.scala-logging" %% "scala-logging" % ScalaLogging,
     "com.typesafe.akka" %% "akka-testkit" % Akka % "test",
-    "org.scalatest" %% "scalatest" % ScalaTest % "test"
+    "org.scalatest" %% "scalatest" % ScalaTest % "test",
+    "com.typesafe.akka" %% "akka-cluster" % Akka,
+    "com.typesafe.akka" %% "akka-remote" % Akka,
+    "com.typesafe.akka" %% "akka-contrib" % Akka,
+    "io.reactivex" %% "rxscala" % ReactiveX
   )
 }
