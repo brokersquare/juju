@@ -1,6 +1,7 @@
 package juju.testkit.infrastructure
 
 import akka.actor._
+import akka.util.Timeout
 import juju.infrastructure.Office._
 import juju.sample.PriorityAggregate
 import juju.sample.PriorityAggregate.{CreatePriority, IncreasePriority, PriorityCreated, PriorityIncreased}
@@ -9,6 +10,7 @@ import juju.testkit.AkkaSpec
 import scala.concurrent.duration._
 
 trait OfficeSpec extends AkkaSpec {
+  implicit override val timeout: Timeout = 300 seconds
   protected def subscribeDomainEvents()
 
   it should "be able to create the aggregate from the command" in {
@@ -17,7 +19,7 @@ trait OfficeSpec extends AkkaSpec {
     val officeRef = office[PriorityAggregate]
     officeRef ! CreatePriority("giangi")
 
-    expectMsg(3 seconds, PriorityCreated("giangi"))
+    expectMsg(timeout.duration, PriorityCreated("giangi"))
   }
 
   it should "be able to route command to existing aggregate" in {
@@ -26,9 +28,9 @@ trait OfficeSpec extends AkkaSpec {
     val officeRef = office[PriorityAggregate]
 
     officeRef ! CreatePriority("giangi")
-    expectMsg(3 seconds, PriorityCreated("giangi"))
+    expectMsg(timeout.duration, PriorityCreated("giangi"))
     officeRef ! IncreasePriority("giangi")
-    expectMsg(3 seconds, PriorityIncreased("giangi", 1))
+    expectMsg(timeout.duration, PriorityIncreased("giangi", 1))
   }
 
    //TODO: tests not yet implemented

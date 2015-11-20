@@ -4,7 +4,7 @@ import akka.contrib.pattern.DistributedPubSubMediator.{SubscribeAck, Subscribe, 
 import akka.contrib.pattern._
 import akka.serialization.Serialization
 import com.typesafe.config.ConfigFactory
-import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
+import org.scalatest.{Ignore, BeforeAndAfterAll, Matchers, WordSpecLike}
 import rx.lang.scala.{Observable, Observer, Subscription}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -14,6 +14,7 @@ case class Ping(text: String)
 case class Pong(text: String)
 case class Echo(id: Int, text: String)
 
+@Ignore
 class ClusterSpikeSpec extends WordSpecLike
   with Matchers with BeforeAndAfterAll {
 

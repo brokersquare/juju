@@ -1,8 +1,8 @@
 package juju.infrastructure
 
 import akka.actor.ActorRef
-import juju.domain.{AggregateRootFactory, AggregateRoot}
 import juju.domain.AggregateRoot.AggregateIdResolution
+import juju.domain.{AggregateRoot, AggregateRootFactory}
 
 import scala.reflect.ClassTag
 
