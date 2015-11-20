@@ -1,7 +1,7 @@
 package juju.infrastructure.cluster
 
 import akka.actor._
-import akka.contrib.pattern.{ClusterSharding, ShardRegion}
+import akka.cluster.sharding.{ClusterShardingSettings, ClusterSharding, ShardRegion}
 import juju.domain.AggregateRoot.AggregateIdResolution
 import juju.domain.{AggregateRoot, AggregateRootFactory}
 import juju.infrastructure.OfficeFactory
@@ -39,16 +39,17 @@ object ClusterOffice {
         val clazz = implicitly[ClassTag[A]].runtimeClass.asInstanceOf[Class[A]]
         val className = clazz.getSimpleName
 
-        val idExtractor: ShardRegion.IdExtractor = {
+        val idExtractor: ShardRegion.ExtractEntityId = {
           case cmd : Command => (resolution.resolve(cmd), cmd)
           case _ => ???
         }
 
-        val shardResolver: ShardRegion.ShardResolver = {
+        val shardResolver: ShardRegion.ExtractShardId = {
           case cmd: Command => Integer.toHexString(resolution.resolve(cmd).hashCode).charAt(0).toString
           case _ => ???
         }
-        ClusterSharding(system).start(className, Some(props), idExtractor, shardResolver)
+        //ClusterSharding(system).start(className, Some(props), idExtractor, shardResolver)
+        ClusterSharding(system).start(className, props, ClusterShardingSettings(system), idExtractor, shardResolver)
       }
     }
   }
