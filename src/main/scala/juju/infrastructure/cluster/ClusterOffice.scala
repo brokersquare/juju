@@ -48,7 +48,6 @@ object ClusterOffice {
           case cmd: Command => Integer.toHexString(resolution.resolve(cmd).hashCode).charAt(0).toString
           case _ => ???
         }
-        //ClusterSharding(system).start(className, Some(props), idExtractor, shardResolver)
         ClusterSharding(system).start(className, props, ClusterShardingSettings(system), idExtractor, shardResolver)
       }
     }

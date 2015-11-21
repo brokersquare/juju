@@ -1,19 +1,21 @@
-/*
+
 import akka.actor._
-import akka.contrib.pattern.DistributedPubSubMediator.{SubscribeAck, Subscribe, Publish}
-import akka.contrib.pattern._
+import akka.cluster.client.{ClusterClient, ClusterClientReceptionist, ClusterClientSettings}
+import akka.cluster.pubsub.DistributedPubSub
+import akka.cluster.pubsub.DistributedPubSubMediator.{Publish, Subscribe, SubscribeAck}
+import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
 import akka.serialization.Serialization
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{Ignore, BeforeAndAfterAll, Matchers, WordSpecLike}
 import rx.lang.scala.{Observable, Observer, Subscription}
 
+import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
 case class Ping(text: String)
 case class Pong(text: String)
 case class Echo(id: Int, text: String)
-
 @Ignore
 class ClusterSpikeSpec extends WordSpecLike
   with Matchers with BeforeAndAfterAll {
@@ -26,8 +28,7 @@ class ClusterSpikeSpec extends WordSpecLike
 
   override def afterAll() = {
     servers foreach { s =>
-      s shutdown()
-      s awaitTermination(60 seconds)
+      Await.result(s.whenTerminated, 60 seconds)
       MessageNotifier.clear()
     }
   }
@@ -48,8 +49,9 @@ class ClusterSpikeSpec extends WordSpecLike
 
       result.length should be > 1
 
-      client shutdown()
-      client awaitTermination(60 seconds)
+      Await.result(client.whenTerminated, 60 seconds)
+      //client shutdown()
+      //client awaitTermination(60 seconds)
     }
 
     "could publish message inside the cluster" in {
@@ -71,8 +73,9 @@ class ClusterSpikeSpec extends WordSpecLike
 
       result should have length servers.length
 
-      client shutdown()
-      client awaitTermination(60 seconds)
+      //client shutdown()
+      //client awaitTermination(60 seconds)
+      Await.result(client.whenTerminated, 60 seconds)
     }
   }
 
@@ -80,19 +83,19 @@ class ClusterSpikeSpec extends WordSpecLike
     """
       |akka {
       |  persistence {
-      |    #journal.plugin = "akka.persistence.journal.inmem"
-      |    #snapshot-store.plugin = "inmemory-snapshot-store"
+      |    journal.plugin = "akka.persistence.journal.inmem"
+      |    #journal.plugin = "akka.persistence.inmem.journal"
+      |    #snapshot-store.plugin = "akka.persistence.inmem.snapshot-store"
       |
-      |    journal.plugin = "akka.persistence.inmem.journal"
-      |    snapshot-store.plugin = "akka.persistence.inmem.snapshot-store"
+      |    #journal.plugin = "akka.persistence.inmem.journal"
+      |    #snapshot-store.plugin = "akka.persistence.inmem.snapshot-store"
       |  }
       |  actor {
       |    provider = "akka.cluster.ClusterActorRefProvider"
       |  }
       |
-      |  extensions = ["akka.contrib.pattern.ClusterReceptionistExtension"]
-      |  extensions = ["akka.contrib.pattern.DistributedPubSubExtension"]
-      |  remote {
+      |    akka.actor.provider = "akka.cluster.ClusterActorRefProvider"
+      |   remote {
       |    log-remote-lifecycle-events = off
       |    netty.tcp {
       |      hostname = "127.0.0.1"
@@ -113,9 +116,10 @@ class ClusterSpikeSpec extends WordSpecLike
   val clientConfig =
     """
       |akka.actor.provider = "akka.cluster.ClusterActorRefProvider"
-      |extensions = ["akka.contrib.pattern.ClusterReceptionistExtension"]
-      |extensions = ["akka.contrib.pattern.DistributedPubSubExtension"]
-    """.stripMargin
+      |extensions = ["akka.cluster.client.ClusterClientReceptionist","akka.cluster.pubsub.DistributedPubSub"]
+      |metrics.enabled = off
+      |log-info = off
+      |""".stripMargin
 
   def idResolver(msg: Any) : String = msg match {
     case msg: Ping => msg.text
@@ -123,11 +127,11 @@ class ClusterSpikeSpec extends WordSpecLike
     case _ => ???
   }
 
-  val idExtractor: ShardRegion.IdExtractor = {
+  val idExtractor: ShardRegion.ExtractEntityId = {
     case msg => (idResolver(msg), msg)
   }
 
-  val shardResolver: ShardRegion.ShardResolver = {
+  val shardResolver: ShardRegion.ExtractShardId = {
     case m => Integer.toHexString(idResolver(m).hashCode).charAt(0).toString
   }
 
@@ -142,12 +146,13 @@ class ClusterSpikeSpec extends WordSpecLike
 
       ClusterSharding(system).start(
         typeName = "server",
-        entryProps = Some(Props(classOf[ServerActor])),
-        idExtractor = idExtractor,
-        shardResolver = shardResolver)
+        entityProps = Props(classOf[ServerActor]),
+        ClusterShardingSettings(system),
+        extractEntityId = idExtractor,
+        extractShardId = shardResolver)
 
       val region = ClusterSharding(system).shardRegion("server")
-      ClusterReceptionistExtension(system)
+      ClusterClientReceptionist(system)
         .registerService(region)
       system
     }
@@ -159,10 +164,19 @@ class ClusterSpikeSpec extends WordSpecLike
     val system = ActorSystem("ClientSystem", config)
     val log = system.log
 
+    //val initialContacts = Set(
+    //  system.actorSelection("akka.tcp://ClusterSystem@127.0.0.1:2551/user/receptionist"),
+    //  system.actorSelection("akka.tcp://ClusterSystem@127.0.0.1:2552/user/receptionist"))
+    //val client = system.actorOf(ClusterClient.props(ClusterClientSettings(system).withInitialContacts(initialContacts)))
+   // val client = system.actorOf(ClusterClient.props(
+      //ClusterClientSettings(system).withInitialContacts(initialContacts)), "client")
+
     val initialContacts = Set(
-      system.actorSelection("akka.tcp://ClusterSystem@127.0.0.1:2551/user/receptionist"),
-      system.actorSelection("akka.tcp://ClusterSystem@127.0.0.1:2552/user/receptionist"))
-    val client = system.actorOf(ClusterClient.props(initialContacts))
+      ActorPath.fromString("akka.tcp://ClusterSystem@127.0.0.1:2551/user/receptionist"),
+      ActorPath.fromString("akka.tcp://ClusterSystem@127.0.0.1:2552/user/receptionist"))
+    val settings = ClusterClientSettings(system)
+      .withInitialContacts(initialContacts)
+    val client = system.actorOf(ClusterClient.props(settings))
 
     var count = 1
     system.scheduler.schedule(5 seconds, 5 seconds) {
@@ -177,7 +191,7 @@ class ClusterSpikeSpec extends WordSpecLike
 
 class EchoSubscriber extends Actor with ActorLogging {
   val address = Serialization.serializedActorPath(self)
-  val mediator = DistributedPubSubExtension(context.system).mediator
+  val mediator = DistributedPubSub(context.system).mediator
 
   mediator ! Subscribe("echo", self)
 
@@ -191,7 +205,7 @@ class EchoSubscriber extends Actor with ActorLogging {
 
 class ServerActor extends Actor with ActorLogging {
   val address = Serialization.serializedActorPath(self)
-  val mediator = DistributedPubSubExtension(context.system).mediator
+  val mediator = DistributedPubSub(context.system).mediator
 
   override def receive: Actor.Receive = {
     case m@Ping(text) =>
@@ -230,4 +244,3 @@ object MessageNotifier {
     }
   }
 }
-*/

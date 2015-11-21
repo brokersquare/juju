@@ -1,9 +1,9 @@
 package juju.infrastructure.cluster
-/*
+
 import akka.actor._
-import akka.contrib.pattern.ClusterClient.Publish
-import akka.contrib.pattern.DistributedPubSubMediator.{Subscribe, SubscribeAck}
-import akka.contrib.pattern.{ClusterSharding, DistributedPubSubExtension, ShardRegion}
+import akka.cluster.pubsub.DistributedPubSub
+import akka.cluster.pubsub.DistributedPubSubMediator.{Subscribe, SubscribeAck, Publish}
+import akka.cluster.sharding.{ClusterShardingSettings, ClusterSharding, ShardRegion}
 import akka.serialization.Serialization
 import akka.testkit.{DefaultTimeout, ImplicitSender, TestKitBase}
 import akka.util.Timeout
@@ -16,6 +16,7 @@ import juju.sample.PriorityAggregate
 import juju.sample.PriorityAggregate.{PriorityIncreased, CreatePriority, PriorityCreated}
 import org.scalatest._
 
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
@@ -52,22 +53,22 @@ object ClusterOfficeSpec {
     val resolution = implicitly[AggregateIdResolution[A]]
     val className = implicitly[ClassTag[A]].runtimeClass.asInstanceOf[Class[A]].getSimpleName
 
-    val idExtractor: ShardRegion.IdExtractor = {
+    val idExtractor: ShardRegion.ExtractEntityId = {
       case cmd : Command => (resolution.resolve(cmd), cmd)
       case _ => ???
     }
 
-    val shardResolver: ShardRegion.ShardResolver = {
+    val shardResolver: ShardRegion.ExtractShardId = {
       case cmd: Command => Integer.toHexString(resolution.resolve(cmd).hashCode).charAt(0).toString
       case _ => ???
     }
 
     val gatewayProps = Props(classOf[ClusterAggregateGateway], aggregateProps)
 
-    ClusterSharding(system).start(className, Some(gatewayProps), idExtractor, shardResolver)
+    ClusterSharding(system).start(className, gatewayProps, ClusterShardingSettings(system), idExtractor, shardResolver)
   }
 }
-@Ignore
+
 class ClusterOfficeSpec extends {
   //val servers = ClusterOfficeSpec.startupNodes(Seq("2551"))
   val servers = ClusterOfficeSpec.startupNodes(Seq("2551", "0", "0"))
@@ -82,8 +83,7 @@ with DefaultTimeout with ImplicitSender {
 
   override def afterAll() = {
     servers.map(s=>s._2._1) foreach { s =>
-      s shutdown()
-      s awaitTermination (60 seconds)
+      Await.result(s.whenTerminated, 60 seconds)
     }
   }
 
@@ -111,7 +111,7 @@ with DefaultTimeout with ImplicitSender {
 }
 
 class EventSubscriberRedirect(destinationActor: ActorRef, eventsToSubscribe: Seq[String]) extends Actor with ActorLogging {
-  val mediator = DistributedPubSubExtension(context.system).mediator
+  val mediator = DistributedPubSub(context.system).mediator
   eventsToSubscribe.foreach {
     e => mediator ! Subscribe(e, None, self)
   }
@@ -130,7 +130,7 @@ class EventSubscriberRedirect(destinationActor: ActorRef, eventsToSubscribe: Seq
 class ClusterAggregateGateway(aggregateProps: Props) extends Actor with ActorLogging {
   val address = Serialization.serializedActorPath(self)
   var aggregateRef : Option[ActorRef] = None
-  val mediator = DistributedPubSubExtension(context.system).mediator
+  val mediator = DistributedPubSub(context.system).mediator
 
   //TODO: set supervisor strategy
 
@@ -151,4 +151,3 @@ class ClusterAggregateGateway(aggregateProps: Props) extends Actor with ActorLog
     case e => log.info(s"[$address]detected message $e")
   }
 }
-*/
