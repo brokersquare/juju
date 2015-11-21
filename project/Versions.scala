@@ -8,7 +8,5 @@ object Versions {
   val ReactiveX = "0.25.0"
   val KafkaPlugin = "0.4"
   val AkkaKafkaPersistence = "2.3-14"
- // val AkkaKafkaPersistence = "2.4-M2"
-  //val AkkaPersistenceInMemory = "1.0.16"
   val LogBack = "1.1.3"
 }
