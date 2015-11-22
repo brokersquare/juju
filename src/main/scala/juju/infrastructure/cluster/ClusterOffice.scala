@@ -25,19 +25,12 @@ object ClusterOffice {
           case Success(ref) => Some(ref)
           case Failure(ex) if ex.isInstanceOf[IllegalArgumentException] => None
         }
-        /*
-        try {
-          Some(ClusterSharding(system).shardRegion(officeName))
-        } catch {
-          case ex: IllegalArgumentException => None
-        }*/
       }
 
       private def startSharding(): Unit = {
-        val props = implicitly[AggregateRootFactory[A]].props
+        val aggregateProps = implicitly[AggregateRootFactory[A]].props
         val resolution = implicitly[AggregateIdResolution[A]]
-        val clazz = implicitly[ClassTag[A]].runtimeClass.asInstanceOf[Class[A]]
-        val className = clazz.getSimpleName
+        val className = implicitly[ClassTag[A]].runtimeClass.asInstanceOf[Class[A]].getSimpleName
 
         val idExtractor: ShardRegion.ExtractEntityId = {
           case cmd : Command => (resolution.resolve(cmd), cmd)
@@ -48,7 +41,10 @@ object ClusterOffice {
           case cmd: Command => Integer.toHexString(resolution.resolve(cmd).hashCode).charAt(0).toString
           case _ => ???
         }
-        ClusterSharding(system).start(className, props, ClusterShardingSettings(system), idExtractor, shardResolver)
+
+        val gatewayProps = Props(classOf[ClusterAggregateGateway], aggregateProps)
+
+        ClusterSharding(system).start(className, gatewayProps, ClusterShardingSettings(system), idExtractor, shardResolver)
       }
     }
   }
