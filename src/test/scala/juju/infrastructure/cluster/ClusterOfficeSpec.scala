@@ -19,6 +19,7 @@ import org.scalatest._
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
+import scala.util.Random
 
 /*
 import juju.testkit.ClusterDomainSpec
@@ -31,12 +32,11 @@ class ClusterOfficeSpec extends ClusterDomainSpec("ClusterOffice") with OfficeSp
 }*/
 
 object ClusterOfficeSpec {
-  def startupNodes(ports: Seq[String]): Map[String, (ActorSystem, ActorRef)] = {
-    (ports map { port =>
+  def startupNodes(seedPort: String, ports: Seq[String]): Map[String, (ActorSystem, ActorRef)] = {
+    ((Seq(seedPort) ++ ports).toSet[String] map { port =>
       // Override the configuration of the port
       val config = ConfigFactory.parseString("akka.remote.netty.tcp.port=" + port)
-        .withFallback(ConfigFactory.parseString("akka.cluster.seed-nodes=[\"akka.tcp://ClusterSystem@127.0.0.1:2551\"]"))
-        //.withFallback(ConfigFactory.parseString("akka.loglevel=\"DEBUG\""))
+        .withFallback(ConfigFactory.parseString("akka.cluster.seed-nodes=[\"akka.tcp://ClusterSystem@127.0.0.1:" + seedPort + "\"]"))
         .withFallback(ConfigFactory.parseResourcesAnySyntax("domain.conf"))
         .withFallback(ConfigFactory.parseResourcesAnySyntax("cluster.conf"))
 
@@ -72,13 +72,14 @@ object ClusterOfficeSpec {
 }
 
 class ClusterOfficeSpec extends {
-  val servers = ClusterOfficeSpec.startupNodes(Seq("2551"/*, "0", "0"*/))
+  val seedPort: Int = Random.shuffle(2551 to 2600).toSet.head
+  val servers = ClusterOfficeSpec.startupNodes(seedPort.toString, Seq("0", "0"))
   implicit val system = servers.head._2._1
 } with TestKitBase with FlatSpecLike with Matchers with BeforeAndAfterAll with LazyLogging with TryValues
 with DefaultTimeout with ImplicitSender {
   System.setProperty("java.net.preferIPv4Stack", "true")
 
-  implicit override val timeout : Timeout = 50 seconds
+  implicit override val timeout : Timeout = 5 seconds
 
   override def afterAll() = {
     servers.map(s=>s._2._1) foreach { s =>
