@@ -1,11 +1,10 @@
 package juju.testkit
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import com.typesafe.config.{Config, ConfigFactory}
 import juju.domain.AggregateRoot.AggregateIdResolution
 import juju.domain.{AggregateRoot, AggregateRootFactory}
 import juju.infrastructure.cluster.{ClusterNode, ClusterOffice}
-import juju.sample.PriorityAggregate
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -22,32 +21,29 @@ object ClusterDomainSpec {
       .withFallback(config)
   }
 
-  def createSystemOffice[A <: AggregateRoot[_]: AggregateIdResolution : AggregateRootFactory : ClassTag](seed: String, port: String, config: Config) = {
-    val system = ActorSystem("ClusterSystem", createConfig(seed, port, config))
+  def createSystem (seed: String, port: String, config: Config): ActorSystem =
+    ActorSystem("ClusterSystem", createConfig(seed, port, config))
 
+  def createOffice[A <: AggregateRoot[_]: AggregateIdResolution : AggregateRootFactory : ClassTag](system : ActorSystem) = {
     implicit val s = system
-    val office = ClusterOffice.clusterOfficeFactory[A].getOrCreate
-
-    (system, office)
-  }
-
-  def startupNodes(seedPort: String, ports: Seq[String], config: Config): Map[String, (ActorSystem, ActorRef)] = {
-    ((Seq(seedPort) ++ ports).toSet[String] map {port => port -> createSystemOffice[PriorityAggregate](seedPort, port, config)}).toMap
+    ClusterOffice.clusterOfficeFactory[A].getOrCreate
   }
 }
 
 abstract class ClusterDomainSpec (test: String, _config: Config = ClusterDomainSpec.clusterConfig)
   extends {
     val seedPort: Int = Random.shuffle(2551 to 2600).toSet.head
-    val servers = ClusterDomainSpec.startupNodes(seedPort.toString, Seq("0", "0"), _config)
+    val ports = Seq("0", "0")
 
-    override implicit val system : ActorSystem = servers.head._2._1
+    val servers = (Seq(seedPort.toString) ++ ports).toSet[String] map { port => ClusterDomainSpec.createSystem(seedPort.toString, port, _config) }
+    override implicit val system : ActorSystem = servers.head
+
     override val config : Config = system.settings.config
   } with AkkaSpec with ClusterNode {
   behavior of test      //this will print the behavior of the test
 
   override def afterAll() = {
-    servers.map(s=>s._2._1) foreach { s =>
+    servers foreach { s =>
       s.terminate()
       Await.result(s.whenTerminated, 10 seconds)
     }
