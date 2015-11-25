@@ -51,7 +51,6 @@ class LocalSagaRouter[S <: Saga](implicit ct: ClassTag[S], handlersResolution: S
   val subscribedEvents = handlersResolution.resolve()
   
   override def preStart() = {
-    
     subscribedEvents foreach {
       h => context.system.eventStream.subscribe(self, h)
     }

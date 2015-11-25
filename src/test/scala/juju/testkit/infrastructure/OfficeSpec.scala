@@ -19,7 +19,6 @@ trait OfficeSpec extends AkkaSpec {
   it should "be able to create the aggregate from the command" in {
     subscribeDomainEvents()
 
-    //val officeRef = office[PriorityAggregate]
     val officeRef = getOffice[PriorityAggregate]()
     officeRef ! CreatePriority("giangi")
 
@@ -29,7 +28,6 @@ trait OfficeSpec extends AkkaSpec {
   it should "be able to route command to existing aggregate" in {
     subscribeDomainEvents()
 
-    //val officeRef = office[PriorityAggregate]
     val officeRef = getOffice[PriorityAggregate]()
 
     officeRef ! CreatePriority("giangi")
