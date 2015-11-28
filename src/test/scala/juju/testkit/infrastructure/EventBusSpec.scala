@@ -28,7 +28,7 @@ abstract class EventBusSpec(prefix:String) extends DomainSpec(s"${prefix}EventBu
   it should "not able to send a message with no registered handler" in {
     withEventBus { busRef =>
       busRef ! CreatePriority("fake")
-      expectMsg(akka.actor.Status.Failure(HandlerNotDefinedException()))
+      expectMsg(akka.actor.Status.Failure(HandlerNotDefinedException))
     }
   }
 
