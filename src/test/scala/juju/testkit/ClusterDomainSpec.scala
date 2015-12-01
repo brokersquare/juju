@@ -1,5 +1,7 @@
 package juju.testkit
 
+import java.net.ServerSocket
+
 import akka.actor.ActorSystem
 import com.typesafe.config.{Config, ConfigFactory}
 import juju.domain.AggregateRoot.AggregateIdResolution
@@ -9,7 +11,6 @@ import juju.infrastructure.cluster.{ClusterNode, ClusterOffice}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
-import scala.util.Random
 
 object ClusterDomainSpec {
   val clusterConfig = ConfigFactory.parseResourcesAnySyntax("domain.conf")
@@ -17,22 +18,29 @@ object ClusterDomainSpec {
 
   def createConfig(seedPort: String, port: String, config: Config) = {
     ConfigFactory.parseString("akka.remote.netty.tcp.port=" + port)
-      .withFallback(ConfigFactory.parseString("akka.cluster.seed-nodes=[\"akka.tcp://ClusterSystem@127.0.0.1:" + seedPort + "\"]"))
+      .withFallback(ConfigFactory.parseString("akka.cluster.seed-nodes=[\"akka.tcp://ClusterSystem" + seedPort + "@127.0.0.1:" + seedPort + "\"]"))
       .withFallback(config)
   }
 
   def createSystem (seed: String, port: String, config: Config): ActorSystem =
-    ActorSystem("ClusterSystem", createConfig(seed, port, config))
+    ActorSystem(s"ClusterSystem$seed", createConfig(seed, port, config))
 
-  def createOffice[A <: AggregateRoot[_]: AggregateIdResolution : AggregateRootFactory : ClassTag](system : ActorSystem) = {
+  def createOffice[A <: AggregateRoot[_]: AggregateIdResolution : AggregateRootFactory : ClassTag](tenant: String)(system : ActorSystem) = {
     implicit val s = system
-    ClusterOffice.clusterOfficeFactory[A].getOrCreate
+    ClusterOffice.clusterOfficeFactory[A](tenant).getOrCreate
+  }
+
+  def getAvailablePort: Int = {
+    val socket = new ServerSocket(0)
+    val port = socket.getLocalPort
+    socket.close()
+    port
   }
 }
 
 abstract class ClusterDomainSpec (test: String, _config: Config = ClusterDomainSpec.clusterConfig)
   extends {
-    val seedPort: Int = Random.shuffle(2551 to 2600).toSet.head
+    val seedPort: Int = ClusterDomainSpec.getAvailablePort
     val ports = Seq("0", "0")
 
     val servers = (Seq(seedPort.toString) ++ ports).toSet[String] map { port => ClusterDomainSpec.createSystem(seedPort.toString, port, _config) }

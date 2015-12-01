@@ -14,12 +14,12 @@ import scala.reflect.ClassTag
 trait OfficeSpec extends AkkaSpec {
   implicit override val timeout: Timeout = 300 seconds
   protected def subscribeDomainEvents()
-  protected def getOffice[A <: AggregateRoot[_]: AggregateIdResolution : AggregateRootFactory : ClassTag]() : ActorRef
+  protected def createOffice[A <: AggregateRoot[_]: AggregateIdResolution : AggregateRootFactory : ClassTag](tenant: String) : ActorRef
 
   it should "be able to create the aggregate from the command" in {
     subscribeDomainEvents()
 
-    val officeRef = getOffice[PriorityAggregate]()
+    val officeRef = createOffice[PriorityAggregate]("1")
     officeRef ! CreatePriority("giangi")
 
     expectMsg(timeout.duration, PriorityCreated("giangi"))
@@ -28,7 +28,7 @@ trait OfficeSpec extends AkkaSpec {
   it should "be able to route command to existing aggregate" in {
     subscribeDomainEvents()
 
-    val officeRef = getOffice[PriorityAggregate]()
+    val officeRef = createOffice[PriorityAggregate]("2")
 
     officeRef ! CreatePriority("giangi")
     expectMsg(timeout.duration, PriorityCreated("giangi"))

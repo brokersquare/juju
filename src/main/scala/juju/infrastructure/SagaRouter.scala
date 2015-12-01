@@ -12,7 +12,14 @@ object SagaRouter {
 }
 
 abstract class SagaRouterFactory[S <: Saga : ClassTag] {
+  val tenant: String
   def getOrCreate: ActorRef
-  def routerName = implicitly[ClassTag[S]].runtimeClass.getSimpleName
+  def routerName =
+    if (tenant == null || tenant == "") {
+      implicitly[ClassTag[S]].runtimeClass.getSimpleName
+    }
+  else {
+      s"${tenant}_" + implicitly[ClassTag[S]].runtimeClass.getSimpleName
+    }
 }
 

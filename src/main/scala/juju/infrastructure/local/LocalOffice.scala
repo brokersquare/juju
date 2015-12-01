@@ -15,8 +15,9 @@ import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
 object LocalOffice {
-  implicit def localOfficeFactory[A <: AggregateRoot[_] : AggregateIdResolution : AggregateRootFactory : ClassTag](implicit system : ActorSystem) = {
+  implicit def localOfficeFactory[A <: AggregateRoot[_] : AggregateIdResolution : AggregateRootFactory : ClassTag](_tenant: String)(implicit system : ActorSystem) = {
     new OfficeFactory[A] {
+      override val tenant : String = _tenant
       override def getOrCreate: ActorRef = {
         val actorName = s"$officeName"
         implicit val timeout = Timeout(FiniteDuration(1, TimeUnit.SECONDS))

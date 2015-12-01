@@ -11,6 +11,14 @@ object Office {
 }
 
 abstract class OfficeFactory[A <: AggregateRoot[_] : AggregateIdResolution : AggregateRootFactory : ClassTag] {
+  val tenant : String
+
   def getOrCreate: ActorRef
-  def officeName = implicitly[ClassTag[A]].runtimeClass.getSimpleName
+
+  def officeName: String =
+    if (tenant == null || tenant == "") {
+      implicitly[ClassTag[A]].runtimeClass.getSimpleName
+    } else {
+      s"${tenant}_" + implicitly[ClassTag[A]].runtimeClass.getSimpleName
+    }
 }

@@ -14,8 +14,10 @@ import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
 object ClusterOffice {
-  implicit def clusterOfficeFactory[A <: AggregateRoot[_] : AggregateIdResolution : AggregateRootFactory : ClassTag](implicit system : ActorSystem) = {
+  implicit def clusterOfficeFactory[A <: AggregateRoot[_] : AggregateIdResolution : AggregateRootFactory : ClassTag](_tenant: String)(implicit system : ActorSystem) = {
     new OfficeFactory[A] {
+      override val tenant = _tenant
+
       override def getOrCreate: ActorRef = {
         region.getOrElse {
           startSharding()
@@ -33,7 +35,7 @@ object ClusterOffice {
       private def startSharding(): Unit = {
         val aggregateProps = implicitly[AggregateRootFactory[A]].props
         val resolution = implicitly[AggregateIdResolution[A]]
-        val className = implicitly[ClassTag[A]].runtimeClass.asInstanceOf[Class[A]].getSimpleName
+        //val className = implicitly[ClassTag[A]].runtimeClass.asInstanceOf[Class[A]].getSimpleName
 
         val idExtractor: ShardRegion.ExtractEntityId = {
           case cmd : Command => (resolution.resolve(cmd), cmd)
@@ -47,7 +49,7 @@ object ClusterOffice {
 
         val officeProps = Props(classOf[ClusterOffice], aggregateProps)
 
-        ClusterSharding(system).start(className, officeProps, ClusterShardingSettings(system), idExtractor, shardResolver)
+        ClusterSharding(system).start(officeName, officeProps, ClusterShardingSettings(system), idExtractor, shardResolver)
       }
     }
   }

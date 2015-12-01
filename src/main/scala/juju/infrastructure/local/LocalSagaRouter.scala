@@ -15,9 +15,9 @@ import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
 object LocalSagaRouter {
-  implicit def localSagaRouterFactory[S <: Saga : ClassTag :SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](implicit system : ActorSystem) = new SagaRouterFactory[S] {
+  implicit def localSagaRouterFactory[S <: Saga : ClassTag :SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](_tenant: String)(implicit system : ActorSystem) = new SagaRouterFactory[S] {
     private def log = system.log
-
+    override val tenant = _tenant
 
     override def getOrCreate: ActorRef = {
       val actorName = s"$routerName"

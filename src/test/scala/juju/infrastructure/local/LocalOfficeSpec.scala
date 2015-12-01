@@ -15,5 +15,5 @@ class LocalOfficeSpec extends LocalDomainSpec("LocalOffice") with OfficeSpec {
     system.eventStream.subscribe(this.testActor, classOf[PriorityIncreased])
   }
 
-  override protected def getOffice[A <: AggregateRoot[_]: AggregateIdResolution : AggregateRootFactory : ClassTag](): ActorRef = officeFactory[A].getOrCreate
+  override protected def createOffice[A <: AggregateRoot[_]: AggregateIdResolution : AggregateRootFactory : ClassTag](tenant: String): ActorRef = LocalOffice.localOfficeFactory(tenant).getOrCreate
 }

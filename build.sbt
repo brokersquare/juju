@@ -6,7 +6,7 @@ version := Versions.Juju
 
 scalaVersion  := Versions.Scala
 
-scalacOptions := Seq("-language:postfixOps", "-feature", "-deprecation")
+scalacOptions := Seq("-language:postfixOps", "-feature", "-deprecation", "-language:implicitConversions")
 
 resolvers ++= Seq(
   "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
