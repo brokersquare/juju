@@ -11,7 +11,7 @@ import juju.messages.DomainEvent
 import juju.sample.ColorAggregate.ChangeWeight
 import juju.sample.ColorPriorityAggregate.ColorAssigned
 import juju.sample.PriorityActivitiesSaga
-import juju.sample.PriorityActivitiesSaga.{EchoWakeUp, PublishEcho}
+import juju.sample.PriorityActivitiesSaga.{PriorityActivitiesActivate, EchoWakeUp, PublishEcho}
 import juju.sample.PriorityAggregate.PriorityIncreased
 import juju.testkit.AkkaSpec
 
@@ -94,7 +94,7 @@ trait SagaRouterSpec extends AkkaSpec {
     )
     shutdownRouter[PriorityActivitiesSaga](tenant, routerRef)
   }
-/*
+
   it should "activate saga by activate message" in {
     val tenant = "T4"
     val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant)
@@ -102,10 +102,12 @@ trait SagaRouterSpec extends AkkaSpec {
     routerRef ! UpdateHandlers(Map.empty + (classOf[PublishEcho] -> this.testActor))
     expectMsg(timeout.duration, Success)
     routerRef ! PriorityActivitiesActivate("1")
+
+    expectMsgType[SagaIsUp](timeout.duration)
     routerRef ! EchoWakeUp("hello world")
 
     expectMsgAllOf(timeout.duration, PublishEcho("echo from priority 1: hello world"))
     shutdownRouter[PriorityActivitiesSaga](tenant, routerRef)
-  }*/
+  }
 }
 

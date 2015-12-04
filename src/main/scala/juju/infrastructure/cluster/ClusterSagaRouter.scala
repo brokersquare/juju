@@ -76,13 +76,15 @@ object ClusterSagaRouter {
     val name = s"${sagaName[S]()}"
     override def entityId(message: Any): String = message match {
       case event : DomainEvent if correlationIdResolution.resolve(event).isDefined => correlationIdResolution.resolve(event).get
+      case activate : Activate  => activate.correlationId
     }
     override def shardId(message: Any): String = message match {
       case event: DomainEvent => Integer.toHexString(correlationIdResolution.resolve(event).hashCode).charAt(0).toString
-
+      case activate: Activate => Integer.toHexString(activate.correlationId.hashCode).charAt(0).toString
     }
     override def entityMessage(message: Any): Any = message match {
       case e: DomainEvent => e
+      case e: Activate => e
     }
   }
 }
@@ -135,9 +137,12 @@ class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorr
       context.watch(gatewayRegion)
       gatewayRegion ! ShardRegion.GracefulShutdown
       context.become(Shutdown)
-    case wakeup : WakeUp => {
-      mediator ! Publish(nameWithTenant(tenant, wakeup.getClass), wakeup)
-    }
+    case wakeup : WakeUp =>
+      val topic = nameWithTenant(tenant, wakeup.getClass)
+      mediator ! Publish(topic, wakeup)
+    case activate : Activate =>
+      gatewayRegion ! activate
+
     case _ =>
   }
 
@@ -177,11 +182,6 @@ class ClusterSagaRouterDispatcher[S <: Saga : ClassTag : SagaHandlersResolution]
   log.info(s"[$tenant]cluster saga router dispatcher $index created at $address")
 
   var subscriptionsAckWaitingList = handlersResolution.resolve() map {e => Subscribe(nameWithTenant(tenant, e.getSimpleName), Some(nameWithTenant(tenant, sagaName[S]())), self)}
- // subscriptionsAckWaitingList foreach {mediator ! _}
-  /*
-  handlersResolution.resolve() foreach {e =>
-    mediator ! Subscribe(nameWithTenant(tenant, e.getSimpleName), Some(nameWithTenant(tenant, sagaName[S]())), self)
-  }*/
 
   val sagaRegionName = nameWithTenant(tenant, sagaName[S]())
   val sagaRegion = ClusterSharding(context.system).shardRegion(sagaRegionName)
@@ -290,6 +290,9 @@ class ClusterSagaRouterGateway[S <: Saga : ClassTag : SagaHandlersResolution : S
         case None => log.warning(s"[$tenant]received not handled $command") //TODO: manage commands without handlers
       }
     }
+
+    case activate: Activate =>
+      log.debug(s"received $activate message")
 
     case event: DomainEvent => {
       log.debug(s"[$tenant]received Event $event")
