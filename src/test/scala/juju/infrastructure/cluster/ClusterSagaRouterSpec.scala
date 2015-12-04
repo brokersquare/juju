@@ -2,19 +2,22 @@ package juju.infrastructure.cluster
 
 import akka.actor.ActorRef
 import akka.cluster.pubsub.DistributedPubSub
-import akka.cluster.pubsub.DistributedPubSubMediator.{Publish, SubscribeAck}
-import akka.cluster.sharding.{ShardRegion, ClusterSharding}
+import akka.cluster.pubsub.DistributedPubSubMediator.{UnsubscribeAck, Publish, SubscribeAck}
+import akka.cluster.sharding.{ClusterSharding, ShardRegion}
 import juju.domain.Saga.{SagaCorrelationIdResolution, SagaHandlersResolution}
 import juju.domain.{Saga, SagaFactory}
+import juju.infrastructure.SagaRouter
+import juju.infrastructure.cluster.ClusterSagaRouter.SagaRouterStopped
 import juju.messages.DomainEvent
 import juju.testkit.ClusterDomainSpec
 import juju.testkit.infrastructure.SagaRouterSpec
 
+import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.{Success, Try}
-import scala.concurrent.duration._
 
 class ClusterSagaRouterSpec extends ClusterDomainSpec("ClusterSagaRouter") with SagaRouterSpec {
+  import SagaRouter._
   val mediator = DistributedPubSub(system).mediator
 
   //val state = Cluster(system).state
@@ -45,23 +48,40 @@ class ClusterSagaRouterSpec extends ClusterDomainSpec("ClusterSagaRouter") with 
         createSagaRouter(tenant)
       }
       case scala.util.Failure(ex) if ex.isInstanceOf[IllegalArgumentException] => {
-        mediator ! akka.cluster.pubsub.DistributedPubSubMediator.Subscribe(sagaName, this.testActor)
+        mediator ! akka.cluster.pubsub.DistributedPubSubMediator.Subscribe(nameWithTenant(tenant, classOf[SagaRouterStopped]), this.testActor)
         expectMsgPF(timeout.duration){case SubscribeAck(_) => }
+
+        mediator ! akka.cluster.pubsub.DistributedPubSubMediator.Subscribe(nameWithTenant(tenant, classOf[SagaIsUp]), this.testActor)
+        expectMsgPF(timeout.duration){case SubscribeAck(_) => }
+
         ClusterSagaRouter.clusterSagaRouterFactory(tenant).getOrCreate
       }
     }
   }
 
   override protected def publish(tenant: String, sagaRouterRef: ActorRef, event: DomainEvent) = {
-    mediator ! Publish(topic = tenant+"_"+event.getClass.getSimpleName, event, sendOneMessageToEachGroup = true)
+    system.log.info(s"[$tenant]publishing $event")
+    mediator ! Publish(topic = nameWithTenant(tenant, event.getClass), event, sendOneMessageToEachGroup = true)
   }
 
-  override protected def shutdownRouter(sagaRouterRef: ActorRef): Unit = {
+  override protected def shutdownRouter[S <: Saga : ClassTag](tenant: String, sagaRouterRef: ActorRef): Unit = {
+    val sagaName = implicitly[ClassTag[S]].runtimeClass.getSimpleName
+
     sagaRouterRef ! ClusterSagaRouter.ShutdownSagaRouter
-    /*expectMsgPF(timeout.duration) {
+    expectMsgPF(timeout.duration) {
       case ClusterSagaRouter.SagaRouterStopped(_) =>
-    }*/
-    sagaRouterRef ! ShardRegion.GracefulShutdown
+    }
+
+    mediator ! akka.cluster.pubsub.DistributedPubSubMediator.Unsubscribe(nameWithTenant(tenant, classOf[SagaRouterStopped]), this.testActor)
+    expectMsgPF(timeout.duration) {
+      case UnsubscribeAck(_) =>
+    }
+
+    mediator ! akka.cluster.pubsub.DistributedPubSubMediator.Unsubscribe(nameWithTenant(tenant, classOf[SagaIsUp]), this.testActor)
+    expectMsgPF(timeout.duration){
+      case UnsubscribeAck(_) =>
+    }
+
     akka.pattern.gracefulStop(sagaRouterRef, 100 seconds, stopMessage = ShardRegion.GracefulShutdown)
     logger.debug(s"sagaRouter stopped")
   }

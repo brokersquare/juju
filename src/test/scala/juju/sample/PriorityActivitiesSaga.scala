@@ -70,6 +70,8 @@ class PriorityActivitiesSaga(val priority: Int, commandRouter: ActorRef) extends
 
   def deliveryChangeWeightIfNeeded(activities : Int): Unit = {
     log.debug(s"delivery command to signal $activities")
-    if (color != "") deliverCommand(commandRouter, ChangeWeight(color, activities))
+    if (color != "") {
+      deliverCommand(commandRouter, ChangeWeight(color, activities))
+    }
   }
 }

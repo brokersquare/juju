@@ -6,6 +6,7 @@ import akka.actor._
 import akka.util.Timeout
 import juju.domain.Saga.{SagaCorrelationIdResolution, SagaHandlersResolution}
 import juju.domain._
+import juju.infrastructure.SagaRouter._
 import juju.infrastructure.{DomainEventsSubscribed, GetSubscribedDomainEvents, SagaRouterFactory, UpdateHandlers}
 import juju.messages.{Activate, Command, DomainEvent, WakeUp}
 
@@ -20,10 +21,11 @@ object LocalSagaRouter {
     override val tenant = _tenant
 
     override def getOrCreate: ActorRef = {
+      //val actorName = nameWithTenant(tenant, s"$routerName")
       val actorName = s"$routerName"
       implicit val timeout = Timeout(FiniteDuration(10, TimeUnit.SECONDS))
-      val props = Props(new LocalSagaRouter[S]())
-      Try(system.actorOf(props, actorName)) match { //TODO: make async
+      val props = Props(new LocalSagaRouter[S](tenant))
+      Try(system.actorOf(props, actorName)) match { //TODO: make async?
         case Success(ref) =>
           ref
         case Failure(ex) =>
@@ -33,7 +35,8 @@ object LocalSagaRouter {
           log.debug(s"looking for router $childPath")
           val childFuture : Future[ActorRef] = system.actorSelection(childPath).resolveOne()
           Await.ready(childFuture, timeout.duration).value.get match {
-            case Success(res) => res
+            case Success(res) =>
+              res
             case Failure(ex) =>
               log.warning(s"an error occours ${ex.getMessage}. Retrying to get or create ...")
               getOrCreate
@@ -44,8 +47,9 @@ object LocalSagaRouter {
   }
 }
 
-class LocalSagaRouter[S <: Saga](implicit ct: ClassTag[S], handlersResolution: SagaHandlersResolution[S], idResolver : SagaCorrelationIdResolution[S], sagaFactory : SagaFactory[S])
+class LocalSagaRouter[S <: Saga](tenant: String)(implicit ct: ClassTag[S], handlersResolution: SagaHandlersResolution[S], idResolver : SagaCorrelationIdResolution[S], sagaFactory : SagaFactory[S])
   extends Actor with ActorLogging {
+
   val sagaName = implicitly[ClassTag[S]].runtimeClass.getSimpleName //TODO: take it from the sagaRouterFactory
   var handlers = Map[Class[_ <: Command], ActorRef]()
   val subscribedEvents = handlersResolution.resolve()
@@ -85,9 +89,11 @@ class LocalSagaRouter[S <: Saga](implicit ct: ClassTag[S], handlersResolution: S
   }
 
   private def getOrCreateSaga(correlationId: String): ActorRef = {
-    context.child(correlationId).getOrElse({
-      val ref = context.actorOf(sagaFactory.props(correlationId, self), correlationId)
+    val actorName = nameWithTenant(tenant, correlationId)
+    context.child(actorName).getOrElse({
+      val ref = context.actorOf(sagaFactory.props(correlationId, self), actorName)
       log.debug(s"router $self create saga $ref")
+      context.system.eventStream.publish(SagaIsUp(implicitly[ClassTag[S]].runtimeClass.asInstanceOf[Class[S]], ref, tenant, correlationId))
       ref
     })
   }

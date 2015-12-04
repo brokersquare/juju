@@ -2,15 +2,16 @@ package juju.infrastructure.cluster
 
 import akka.actor._
 import akka.cluster.pubsub.DistributedPubSub
-import akka.cluster.pubsub.DistributedPubSubMediator.{Publish, Subscribe, SubscribeAck}
+import akka.cluster.pubsub.DistributedPubSubMediator.{Publish, Subscribe, SubscribeAck, Unsubscribe}
 import akka.cluster.sharding.ShardRegion.MessageExtractor
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
 import akka.serialization.Serialization
 import com.typesafe.config.ConfigFactory
 import juju.domain.Saga.{SagaCorrelationIdResolution, SagaHandlersResolution}
 import juju.domain.{Saga, SagaFactory}
+import juju.infrastructure.SagaRouter._
 import juju.infrastructure.{SagaRouterFactory, UpdateHandlers}
-import juju.messages.{Command, DomainEvent, InfrastructureMessage, Message}
+import juju.messages._
 
 import scala.reflect.ClassTag
 import scala.util.Try
@@ -26,8 +27,7 @@ object ClusterSagaRouter {
     override val tenant :String = _tenant
 
     override def getOrCreate: ActorRef = {
-    //  getOrCreateRegion(system, s"${routerName}Router", routerProps(), routerMessageExtractor[S]())
-      getOrCreateRegion(system, withTenantName(tenant,s"${routerName}Router"), routerProps(tenant), routerMessageExtractor[S]())
+      getOrCreateRegion(system, s"${routerName}Router", routerProps(tenant), routerMessageExtractor[S]())
     }
   }
 
@@ -85,20 +85,13 @@ object ClusterSagaRouter {
       case e: DomainEvent => e
     }
   }
-  
-  def withTenantName(tenant: String, name: String): String = {
-    if (tenant == null || tenant.trim == "") {
-      name
-    } else {
-      s"${tenant}_$name"
-    }
-  }
 }
 
 class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String) extends Actor with ActorLogging with Stash {
   import ClusterSagaRouter._
   val address = Serialization.serializedActorPath(self)
   val mediator = DistributedPubSub(context.system).mediator
+  val sagaName = ClusterSagaRouter.sagaName[S]()
 
   var commandHandlers : Map[Class[_ <: Command], ActorRef] = Map.empty
 
@@ -106,12 +99,12 @@ class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorr
     withFallback(ConfigFactory.parseString("juju.cluster.dispatcher-count = 1"))
     .getInt("juju.cluster.dispatcher-count")
 
-//  val dispatcherRegion = ClusterSagaRouter.getOrCreateRegion(context.system, s"${ClusterSagaRouter.sagaName[S]()}Dispatcher", ClusterSagaRouter.dispatcherProps(), ClusterSagaRouter.dispatcherMessageExtractor())
-//  val gatewayRegion = ClusterSagaRouter.getOrCreateRegion(context.system, s"${ClusterSagaRouter.sagaName[S]()}", ClusterSagaRouter.gatewayProps(self), ClusterSagaRouter.gatewayMessageExtractor())
-  val dispatcherRegion = ClusterSagaRouter.getOrCreateRegion(context.system, withTenantName(tenant, s"${ClusterSagaRouter.sagaName[S]()}Dispatcher"), ClusterSagaRouter.dispatcherProps(tenant), ClusterSagaRouter.dispatcherMessageExtractor())
-  val gatewayRegion = ClusterSagaRouter.getOrCreateRegion(context.system, withTenantName(tenant, s"${ClusterSagaRouter.sagaName[S]()}"), ClusterSagaRouter.gatewayProps(tenant, self), ClusterSagaRouter.gatewayMessageExtractor())
+  val gatewayRegion = ClusterSagaRouter.getOrCreateRegion(context.system, nameWithTenant(tenant, sagaName), ClusterSagaRouter.gatewayProps(tenant, self), ClusterSagaRouter.gatewayMessageExtractor())
+  log.info(s"[$tenant]cluster saga router create gateway region $gatewayRegion at $address")
+  val dispatcherRegion = ClusterSagaRouter.getOrCreateRegion(context.system, nameWithTenant(tenant, s"${sagaName}Dispatcher"), ClusterSagaRouter.dispatcherProps(tenant), ClusterSagaRouter.dispatcherMessageExtractor())
+  log.info(s"[$tenant]cluster saga router create dispatcher region $dispatcherRegion at $address")
 
-  (0 to dispatcherCount).foreach { i =>
+  (1 to dispatcherCount).foreach { i =>
     dispatcherRegion ! DispatcherMessage(i, InitializeDispatcher(i))
   }
 
@@ -122,7 +115,7 @@ class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorr
     case akka.actor.Status.Success(InitializeDispatcher(index)) =>
       dispatcherNotInitializedCount = dispatcherNotInitializedCount - 1
       if (dispatcherNotInitializedCount == 0) {
-        log.info(s"router initialization completed. Ready to receive messages")
+        log.info(s"[$tenant]router $sagaName initialization completed. Ready to receive messages")
         context.unbecome()
         unstashAll()
       }
@@ -136,26 +129,29 @@ class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorr
       mediator ! Publish(uh.getClass.getSimpleName, uh)
       sender ! akka.actor.Status.Success
     case ShutdownSagaRouter =>
-      log.info(s"received shutdown. Stopping dispatcher and gateway")
+      log.info(s"[$tenant]$sagaName received shutdown. Stopping dispatcher and gateway")
       context.watch(dispatcherRegion)
       dispatcherRegion ! ShardRegion.GracefulShutdown
       context.watch(gatewayRegion)
       gatewayRegion ! ShardRegion.GracefulShutdown
       context.become(Shutdown)
+    case wakeup : WakeUp => {
+      mediator ! Publish(nameWithTenant(tenant, wakeup.getClass), wakeup)
+    }
     case _ =>
   }
 
   def Shutdown: Receive = {
     case Terminated(`dispatcherRegion`) =>
-      log.info(s"dispatcher terminated")
+      log.info(s"[$tenant]$sagaName dispatcher terminated")
       dispatcherTerminated = true
       shutdownIfReady()
     case Terminated(`gatewayRegion`) =>
-      log.info(s"gateway terminated")
+      log.info(s"[$tenant]$sagaName gateway terminated")
       gatewayTerminated = true
       shutdownIfReady()
     case m => {
-      log.debug(s"received message $m to stash")
+      log.debug(s"[$tenant]$sagaName received message $m to stash")
       stash()
     }
   }
@@ -164,68 +160,115 @@ class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorr
   var gatewayTerminated = false
   private def shutdownIfReady() = {
     if (dispatcherTerminated && gatewayTerminated) {
-      log.info(s"ready to shutdown the router")
+      log.info(s"[$tenant]$sagaName ready to shutdown the router")
       self ! PoisonPill
-      mediator ! Publish(sagaName[S](), SagaRouterStopped(ClusterSagaRouter.sagaName[S]()))
+      mediator ! Publish(nameWithTenant(tenant, classOf[SagaRouterStopped]), SagaRouterStopped(sagaName))
     }
   }
 }
 
-class ClusterSagaRouterDispatcher[S <: Saga : ClassTag : SagaHandlersResolution](tenant: String) extends Actor with ActorLogging {
+class ClusterSagaRouterDispatcher[S <: Saga : ClassTag : SagaHandlersResolution](tenant: String) extends Actor with ActorLogging with Stash {
   import ClusterSagaRouter._
   val index = self.path.name.toInt
-  
   val address = Serialization.serializedActorPath(self)
   val mediator = DistributedPubSub(context.system).mediator
   val handlersResolution = implicitly[SagaHandlersResolution[S]]
 
+  log.info(s"[$tenant]cluster saga router dispatcher $index created at $address")
+
+  var subscriptionsAckWaitingList = handlersResolution.resolve() map {e => Subscribe(nameWithTenant(tenant, e.getSimpleName), Some(nameWithTenant(tenant, sagaName[S]())), self)}
+ // subscriptionsAckWaitingList foreach {mediator ! _}
+  /*
   handlersResolution.resolve() foreach {e =>
-    mediator ! Subscribe(withTenantName(tenant, e.getSimpleName), Some(sagaName[S]()), self)
-  }
+    mediator ! Subscribe(nameWithTenant(tenant, e.getSimpleName), Some(nameWithTenant(tenant, sagaName[S]())), self)
+  }*/
 
-  val sagaRegion = ClusterSharding(context.system).shardRegion(withTenantName(tenant, sagaName[S]()))
+  val sagaRegionName = nameWithTenant(tenant, sagaName[S]())
+  val sagaRegion = ClusterSharding(context.system).shardRegion(sagaRegionName)
+  context.become(initializing)
 
-  override def receive: Actor.Receive = {
+  var initializerRef = ActorRef.noSender
+  var initializerMessage : InitializeDispatcher = null
+  def initializing : Actor.Receive = {
     case SubscribeAck(subscribe) =>
-      log.debug(s"received subscribe ack $subscribe")
-
-    case event : DomainEvent =>
-      log.debug(s"received event $event!")
-      sagaRegion ! event
+      log.info(s"[$tenant]saga dispatcher $index received subscribe ack $subscribe")
+      subscriptionsAckWaitingList = subscriptionsAckWaitingList.filterNot(_ == subscribe)
+      subscriptionsAckWaitingList match {
+        case Nil => {
+          initializerRef ! akka.actor.Status.Success(initializerMessage)
+          context.unbecome()
+          unstashAll()
+        }
+        case _ =>
+      }
 
     case m@InitializeDispatcher(`index`) => {
-      sender ! akka.actor.Status.Success(m)
+      subscriptionsAckWaitingList foreach {mediator ! _}
+      initializerRef = sender()
+      initializerMessage = m
     }
+    case _ =>
+      stash()
+  }
+
+  override def receive: Actor.Receive = {
+    case event : DomainEvent =>
+      log.info(s"[$tenant]saga dispatcher $index received event $event!")
+      sagaRegion ! event
     case _ =>
   }
 
-  override def preRestart(reason: Throwable, message: Option[Any]) = {
-    log.debug("SagaRouter restarted")
-    super.preRestart(reason, message)
+  override def aroundPostStop() = {
+    super.aroundPostStop()
+    handlersResolution.resolve() foreach {e =>
+      mediator ! Unsubscribe(nameWithTenant(tenant, e.getSimpleName), Some(sagaName[S]()), self)
+    }
   }
 
   override def postStop() = {
     super.postStop()
-    log.info("SagaRouter stopped")
+    log.info("[$tenant]SagaRouter dispatcher stopped")
   }
 }
 
 
 class ClusterSagaRouterGateway[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String, sagaRouterRef: ActorRef) extends Actor with ActorLogging with Stash {
   import ClusterSagaRouter._
-  
+
+  val sagaType = implicitly[ClassTag[S]].runtimeClass.asInstanceOf[Class[S]]
   val address = Serialization.serializedActorPath(self)
   val mediator = DistributedPubSub(context.system).mediator
   val correlationId = self.path.name
   val sagaRef = context.actorOf(implicitly[SagaFactory[S]].props(correlationId, self), s"${sagaName[S]()}_$correlationId")
 
+  log.info(s"[$tenant]cluster saga router gateway $sagaType - $correlationId created at $address")
+
   var commandHandlers : Map[Class[_ <: Command], ActorRef] = Map.empty
   sagaRouterRef ! RequestUpdateHandlers
-  mediator ! Subscribe(withTenantName(tenant, classOf[UpdateHandlers].getClass.getSimpleName), self)
 
-  context.become(waitUpdateHandlers)
+  var subscriptionsAckWaitingList =
+    implicitly[SagaHandlersResolution[S]].wakeUpBy().map { clazz =>
+      Subscribe(nameWithTenant(tenant, clazz), self)
+    }.toList.::(Subscribe(nameWithTenant(tenant, classOf[UpdateHandlers]), self))
 
-  def waitUpdateHandlers : Actor.Receive = {
+  subscriptionsAckWaitingList.foreach(s => mediator ! s)
+  context.become(waitForSubscribeAck)
+
+  def waitForSubscribeAck: Actor.Receive = {
+    case SubscribeAck(s) => 
+      subscriptionsAckWaitingList = subscriptionsAckWaitingList.filterNot(_ == s)
+      subscriptionsAckWaitingList match {
+        case Nil =>
+          mediator ! Publish(nameWithTenant(tenant, classOf[SagaIsUp]), SagaIsUp(sagaType, self, tenant, correlationId))
+          context.unbecome()
+          context.become(waitUpdateHandlers)
+          unstashAll()
+        case _ =>
+      }
+    case _ => stash()
+  }
+
+  def waitUpdateHandlers: Actor.Receive = {
     case uh@UpdateHandlers(h) =>
       commandHandlers = h
       context.unbecome()
@@ -235,26 +278,40 @@ class ClusterSagaRouterGateway[S <: Saga : ClassTag : SagaHandlersResolution : S
 
   override def receive: Actor.Receive = {
     case SubscribeAck(subscribe) =>
-      log.debug(s"received subscribe ack $subscribe")
+      log.debug(s"[$tenant]received subscribe ack $subscribe")
 
     case uh@UpdateHandlers(h) =>
       commandHandlers = h
 
     case command: Command => {
-      log.debug(s"received Command $command")
+      log.debug(s"[$tenant]received Command $command")
       commandHandlers.get(command.getClass) match {
         case Some(ref) =>  ref ! command
-        case None => log.warning(s"received not handled $command") //TODO: manage commands without handlers
+        case None => log.warning(s"[$tenant]received not handled $command") //TODO: manage commands without handlers
       }
     }
 
     case event: DomainEvent => {
-      log.debug(s"received Event $event")
+      log.debug(s"[$tenant]received Event $event")
       sagaRef ! event
+    }
+
+    case wakeup: WakeUp => {
+      sagaRef ! wakeup
     }
   }
   
   override def aroundPostStop() = {
-    sagaRef ! PoisonPill
+    super.aroundPostStop()
+    mediator ! Unsubscribe(nameWithTenant(tenant, classOf[UpdateHandlers]), self)
+
+    implicitly[SagaHandlersResolution[S]].wakeUpBy() foreach { clazz =>
+      mediator ! Unsubscribe(nameWithTenant(tenant, clazz), self)
+    }
+  }
+
+  override def postStop() = {
+    super.postStop()
+    log.info(s"[$tenant]SagaRouter gateway stopped")
   }
 }
