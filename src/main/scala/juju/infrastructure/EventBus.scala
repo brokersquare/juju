@@ -14,7 +14,7 @@ import scala.concurrent.duration._
 import scala.language.existentials
 
 object EventBus {
-  def props() = Props(classOf[EventBus])
+  def props(tenant: String = "") = Props(classOf[EventBus], tenant)
 }
 
 case class HandlerNotDefinedException() extends Exception
@@ -27,7 +27,7 @@ case class RegisterSaga[S <: Saga](implicit val routerFactory : SagaRouterFactor
 case class GetSubscribedDomainEvents() extends InfrastructureMessage
 case class DomainEventsSubscribed(events: Iterable[Class[_ <: DomainEvent]]) extends InfrastructureMessage
 
-class EventBus extends Actor with ActorLogging with Stash {
+class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
   var activates = Map[Class[_ <: Activate], ActorRef]()
   var handlers = Map[Class[_ <: Command], ActorRef]()
   var wakeUps = Map[Class[_ <: WakeUp], Seq[ActorRef]]()
@@ -37,6 +37,7 @@ class EventBus extends Actor with ActorLogging with Stash {
   log.debug("EventBus is up and running")
 
   override def receive: Receive = {
+
     case command : Command =>
       log.debug(s"eventbus command $command received")
 
@@ -66,13 +67,12 @@ class EventBus extends Actor with ActorLogging with Stash {
         case None =>
       }
 
-
     case event : DomainEvent => sender ! Failure(new MessageNotSupported(s"event bus cannot handle event $event"))
 
     case msg : RegisterHandlers[a] =>
       val s = sender()
       //TODO: check if handler already set to a different ref and if yes error
-      val office : ActorRef = Office.office[a](msg.officeFactory)
+      val office : ActorRef = Office.office[a](tenant)(msg.officeFactory)
       //TODO: monitor the office through DeathWatch
       val pairs = msg.resolver.resolve().map(c => c -> office)
       handlers = List(handlers.toList, pairs.toList).flatten.toMap
@@ -89,7 +89,7 @@ class EventBus extends Actor with ActorLogging with Stash {
     case msg : RegisterSaga[s] =>
       val s = sender()
 
-      val routerRef = SagaRouter.router[s](msg.routerFactory)
+      val routerRef = SagaRouter.router[s](tenant)(msg.routerFactory)
 
       msg.resolver.activateBy() match {
         case Some(m) =>
@@ -114,7 +114,6 @@ class EventBus extends Actor with ActorLogging with Stash {
           routerRef.tell(GetSubscribedDomainEvents(), s)
           log.debug(s"saga $routerRef registered")
       }
-
     case msg@_ =>
       val errorText = s"EventBus received unexpected message $msg"
       sender ! Failure(new MessageNotSupported(errorText))

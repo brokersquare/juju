@@ -1,20 +1,26 @@
 package juju.infrastructure.cluster
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor._
 import akka.cluster.pubsub.DistributedPubSub
 import akka.cluster.pubsub.DistributedPubSubMediator.{Publish, Subscribe, SubscribeAck, Unsubscribe}
 import akka.cluster.sharding.ShardRegion.MessageExtractor
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
 import akka.serialization.Serialization
+import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import juju.domain.Saga.{SagaCorrelationIdResolution, SagaHandlersResolution}
 import juju.domain.{Saga, SagaFactory}
 import juju.infrastructure.SagaRouter._
-import juju.infrastructure.{SagaRouterFactory, UpdateHandlers}
+import juju.infrastructure.{DomainEventsSubscribed, GetSubscribedDomainEvents, SagaRouterFactory, UpdateHandlers}
 import juju.messages._
 
+import scala.concurrent.Await
+import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
+import scala.concurrent.duration._
 
 object ClusterSagaRouter {
   case class DispatcherMessage(index: Int, message: Message) extends InfrastructureMessage
@@ -27,7 +33,16 @@ object ClusterSagaRouter {
     override val tenant :String = _tenant
 
     override def getOrCreate: ActorRef = {
-      getOrCreateRegion(system, s"${routerName}Router", routerProps(tenant), routerMessageExtractor[S]())
+      val actorName = s"$routerName"
+      implicit val timeout = Timeout(FiniteDuration(1, TimeUnit.SECONDS))
+      val retrieveChild = system.actorSelection(system.child(actorName)).resolveOne()
+
+      Try(system.actorOf(Props(new ClusterSagaProxy[S](tenant, actorName)), actorName)) match {
+        case Success(ref) => ref
+        case Failure(ex) => Await.ready(retrieveChild, 1 seconds).value.get.get
+      }
+
+      //getOrCreateRegion(system, s"${routerName}Router", routerProps(tenant), routerMessageExtractor[S]())
     }
   }
 
@@ -89,6 +104,37 @@ object ClusterSagaRouter {
   }
 }
 
+class ClusterSagaProxy[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String, routerName: String) extends Actor with ActorLogging with Stash {
+  import ClusterSagaRouter._
+  val system = context.system
+  var handlers = Map[Class[_ <: Command], ActorRef]()
+  val subscribedEvents = implicitly[SagaHandlersResolution[S]].resolve()
+  val region = getOrCreateRegion(system, s"${routerName}Router", routerProps(tenant), routerMessageExtractor[S]())
+
+  var updateHandlersSender: Option[ActorRef] = None
+
+  override def receive: Actor.Receive = {
+    case e : GetSubscribedDomainEvents =>
+      sender ! DomainEventsSubscribed(subscribedEvents)
+    case UpdateHandlers(h) =>
+      updateHandlersSender = Some(sender())
+      region ! UpdateHandlers(h)
+      context.become(handlerUpdating)
+    case m =>
+      region ! m
+  }
+
+  def handlerUpdating: Actor.Receive = {
+    case m: akka.actor.Status.Success =>
+      updateHandlersSender.getOrElse(ActorRef.noSender) ! m
+      updateHandlersSender = None
+      context.unbecome()
+      unstashAll()
+    case m =>
+      stash()
+  }
+}
+
 class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String) extends Actor with ActorLogging with Stash {
   import ClusterSagaRouter._
   val address = Serialization.serializedActorPath(self)
@@ -129,7 +175,7 @@ class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorr
     case uh@UpdateHandlers(h) =>
       commandHandlers = h
       mediator ! Publish(uh.getClass.getSimpleName, uh)
-      sender ! akka.actor.Status.Success
+      sender ! akka.actor.Status.Success(uh)
     case ShutdownSagaRouter =>
       log.info(s"[$tenant]$sagaName received shutdown. Stopping dispatcher and gateway")
       context.watch(dispatcherRegion)

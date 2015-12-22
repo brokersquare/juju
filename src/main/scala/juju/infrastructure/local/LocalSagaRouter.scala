@@ -21,7 +21,6 @@ object LocalSagaRouter {
     override val tenant = _tenant
 
     override def getOrCreate: ActorRef = {
-      //val actorName = nameWithTenant(tenant, s"$routerName")
       val actorName = s"$routerName"
       implicit val timeout = Timeout(FiniteDuration(10, TimeUnit.SECONDS))
       val props = Props(new LocalSagaRouter[S](tenant))
@@ -38,7 +37,7 @@ object LocalSagaRouter {
             case Success(res) =>
               res
             case Failure(ex) =>
-              log.warning(s"an error occours ${ex.getMessage}. Retrying to get or create ...")
+              log.warning(s"an error occours ${ex.getMessage}. Retrying to get or create SagaRouter '$actorName'...")
               getOrCreate
               //throw ex
           }
@@ -84,7 +83,7 @@ class LocalSagaRouter[S <: Saga](tenant: String)(implicit ct: ClassTag[S], handl
       if (matchedHandlers.isEmpty) {akka.actor.Status.Failure(new Exception(s"no handlers for command ${c.getClass}"))} //TODO: manage errors during dispatch (a queue for not sended message? A resend from sender)
     case UpdateHandlers(h) =>
       handlers = h
-      sender ! akka.actor.Status.Success
+      sender ! akka.actor.Status.Success(h)
     case _ => ???
   }
 

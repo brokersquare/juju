@@ -34,7 +34,7 @@ object LocalOffice {
 
 class LocalOffice[A <: AggregateRoot[_]](implicit ct: ClassTag[A], idResolver : AggregateIdResolution[A], aggregateFactory : AggregateRootFactory[A])
   extends Actor with ActorLogging {
-  val aggregateName = implicitly[ClassTag[A]].runtimeClass.getSimpleName //TODO: take it from the officefactory
+  val aggregateName = implicitly[ClassTag[A]].runtimeClass.getSimpleName //TODO: take it from an aggregate name service
 
   override def receive: Receive = {
     case cmd: Command =>
@@ -51,7 +51,7 @@ class LocalOffice[A <: AggregateRoot[_]](implicit ct: ClassTag[A], idResolver : 
       context.system.eventStream.publish(event)
     case UpdateHandlers(_) =>
       //log.debug(s"received update handlers => ignore (office cannot route command. Useful only for the saga router)")
-      sender ! akka.actor.Status.Success(s"$aggregateName")
+      sender ! akka.actor.Status.Success(aggregateName)
     case m =>
       log.debug(s"discard message $m")
   }

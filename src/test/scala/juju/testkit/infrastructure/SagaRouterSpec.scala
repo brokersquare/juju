@@ -47,7 +47,7 @@ trait SagaRouterSpec extends AkkaSpec {
     val tenant = "T1"
     val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant)
     routerRef ! UpdateHandlers(Map.empty + (classOf[ChangeWeight] -> this.testActor))
-    expectMsg(timeout.duration, Success)
+    expectMsgType[Success](timeout.duration)
 
     publish(tenant, routerRef, PriorityIncreased("x", 1))
     publish(tenant, routerRef, ColorAssigned(1, "red"))
@@ -65,7 +65,7 @@ trait SagaRouterSpec extends AkkaSpec {
     val tenant = "T2"
     val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant)
     routerRef ! UpdateHandlers(Map.empty + (classOf[ChangeWeight] -> this.testActor))
-    expectMsg(timeout.duration, Success)
+    expectMsgType[Success](timeout.duration)
 
     publish(tenant, routerRef, PriorityIncreased("x", -1)) //-1 doesn't route event
     publish(tenant, routerRef, ColorAssigned(-1, "red"))
@@ -78,7 +78,7 @@ trait SagaRouterSpec extends AkkaSpec {
     val tenant = "T3"
     val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant)
     routerRef ! UpdateHandlers(Map.empty + (classOf[PublishEcho] -> this.testActor))
-    expectMsg(timeout.duration, Success)
+    expectMsgType[Success](timeout.duration)
 
     publish(tenant, routerRef, ColorAssigned(1, "red"))
     publish(tenant, routerRef, ColorAssigned(2, "yellow"))
@@ -100,7 +100,7 @@ trait SagaRouterSpec extends AkkaSpec {
     val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant)
 
     routerRef ! UpdateHandlers(Map.empty + (classOf[PublishEcho] -> this.testActor))
-    expectMsg(timeout.duration, Success)
+    expectMsgType[Success](timeout.duration)
     routerRef ! PriorityActivitiesActivate("1")
 
     expectMsgType[SagaIsUp](timeout.duration)

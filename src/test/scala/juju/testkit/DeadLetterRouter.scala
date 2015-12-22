@@ -17,7 +17,8 @@ class DeadLetterRouter(receiver: ActorRef) extends Actor {
   }
 
   override def receive: Receive = {
-    case DeadLetter(m, _, _) => receiver.tell(m, sender())
-    case _ => throw new Exception("Received unexpected message")
+    case DeadLetter(m, _, _)  =>
+      receiver.tell(m, sender())
+   case _ => throw new Exception("Received unexpected message")
   }
 }

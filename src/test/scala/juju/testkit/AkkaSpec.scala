@@ -1,13 +1,14 @@
 package juju.testkit
-import akka.pattern.gracefulStop
 import java.util.{Calendar, Date}
 
-import akka.actor.{PoisonPill, Props, ActorRef, ActorSystem}
-import akka.testkit.{TestProbe, ImplicitSender, DefaultTimeout, TestKitBase}
+import akka.actor.{ActorRef, ActorSystem, PoisonPill, Props}
+import akka.pattern.gracefulStop
+import akka.testkit.{DefaultTimeout, ImplicitSender, TestKitBase, TestProbe}
 import com.typesafe.config.Config
 import com.typesafe.scalalogging.LazyLogging
-import juju.infrastructure.{Node, EventBus}
-import org.scalatest.{TryValues, Matchers, BeforeAndAfterAll, FlatSpecLike}
+import juju.infrastructure.{EventBus, Node}
+import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers, TryValues}
+
 import scala.concurrent.duration._
 
 trait AkkaSpec extends TestKitBase
@@ -52,16 +53,36 @@ trait AkkaSpec extends TestKitBase
     gracefulStop(this.testActor, 5 seconds)
   }
 
-  protected def withEventBus(action : ActorRef => Unit) = {
+
+  protected def withEventBus(action : ActorRef => Unit): Unit = {
+    withEventBus(Seq.empty)(action)
+  }
+
+  protected def actorNameWithTenant(tenant: String, name: String) = {
+    tenant match {
+      case t if t == null || t.trim == "" => name
+      case _ => s"${tenant}_$name"
+    }
+  }
+
+  protected def withEventBus(subscribedEvents : Seq[Class[_]])(action : ActorRef => Unit) = {
     system.eventStream.unsubscribe(this.testActor)
     var router : ActorRef = null
     var busRef: ActorRef = null
 
+    subscribedEvents.foreach { ec =>
+      system.eventStream.subscribe(this.testActor, ec)
+    }
+
     try {
-      router = system.actorOf(DeadLetterRouter.props(this.testActor))
-      busRef = system.actorOf(EventBus.props())
+      router = system.actorOf(DeadLetterRouter.props(this.testActor), actorNameWithTenant(tenant, "DeadLetterRouter"))
+      busRef = system.actorOf(EventBus.props(tenant), actorNameWithTenant(tenant, "EventBus"))
       action(busRef)
     } finally {
+      subscribedEvents.foreach { ec =>
+        system.eventStream.subscribe(this.testActor, ec)
+      }
+
       system.eventStream.unsubscribe(this.testActor)
 
       if (router != null) router ! PoisonPill

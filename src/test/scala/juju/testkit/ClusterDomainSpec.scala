@@ -5,8 +5,9 @@ import java.net.ServerSocket
 import akka.actor.ActorSystem
 import com.typesafe.config.{Config, ConfigFactory}
 import juju.domain.AggregateRoot.AggregateIdResolution
-import juju.domain.{AggregateRoot, AggregateRootFactory}
-import juju.infrastructure.cluster.{ClusterNode, ClusterOffice}
+import juju.domain.Saga.{SagaHandlersResolution, SagaCorrelationIdResolution}
+import juju.domain.{Saga, SagaFactory, AggregateRoot, AggregateRootFactory}
+import juju.infrastructure.cluster.{ClusterSagaRouter, ClusterNode, ClusterOffice}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -29,6 +30,12 @@ object ClusterDomainSpec {
     implicit val s = system
     ClusterOffice.clusterOfficeFactory[A](tenant).getOrCreate
   }
+
+  def createRouter[S <: Saga : SagaCorrelationIdResolution : SagaFactory: SagaHandlersResolution : ClassTag](tenant: String)(system : ActorSystem) = {
+    implicit val s = system
+    ClusterSagaRouter.clusterSagaRouterFactory(tenant).getOrCreate
+  }
+
 
   def getAvailablePort: Int = {
     val socket = new ServerSocket(0)
