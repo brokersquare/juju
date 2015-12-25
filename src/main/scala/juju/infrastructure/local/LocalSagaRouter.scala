@@ -7,7 +7,7 @@ import akka.util.Timeout
 import juju.domain.Saga.{SagaCorrelationIdResolution, SagaHandlersResolution}
 import juju.domain._
 import juju.infrastructure.SagaRouter._
-import juju.infrastructure.{DomainEventsSubscribed, GetSubscribedDomainEvents, SagaRouterFactory, UpdateHandlers}
+import juju.infrastructure._
 import juju.messages.{Activate, Command, DomainEvent, WakeUp}
 
 import scala.concurrent.duration.FiniteDuration
@@ -88,7 +88,7 @@ class LocalSagaRouter[S <: Saga](tenant: String)(implicit ct: ClassTag[S], handl
   }
 
   private def getOrCreateSaga(correlationId: String): ActorRef = {
-    val actorName = nameWithTenant(tenant, correlationId)
+    val actorName = EventBus.nameWithTenant(tenant, correlationId)
     context.child(actorName).getOrElse({
       val ref = context.actorOf(sagaFactory.props(correlationId, self), actorName)
       log.debug(s"router $self create saga $ref")

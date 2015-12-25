@@ -5,6 +5,7 @@ import akka.cluster.pubsub.DistributedPubSub
 import akka.cluster.pubsub.DistributedPubSubMediator.{Subscribe, SubscribeAck}
 import juju.domain.AggregateRoot.AggregateIdResolution
 import juju.domain.{AggregateRoot, AggregateRootFactory}
+import juju.infrastructure.EventBus
 import juju.sample.PriorityAggregate.{PriorityCreated, PriorityIncreased}
 import juju.testkit.ClusterDomainSpec
 import juju.testkit.infrastructure.OfficeSpec
@@ -15,12 +16,13 @@ class ClusterOfficeSpec extends ClusterDomainSpec("ClusterOffice") with OfficeSp
   var offices : Set[ActorRef] = Set.empty
 
   override protected def subscribeDomainEvents(): Unit = {
-    val events = Seq(classOf[PriorityCreated].getSimpleName,classOf[PriorityIncreased].getSimpleName)
+    val events = Seq(classOf[PriorityCreated],classOf[PriorityIncreased])
 
     val mediator = DistributedPubSub(system).mediator
     events.foreach { e =>
-      mediator ! Subscribe(e, None, this.testActor)
-      expectMsg(SubscribeAck(Subscribe(e, None, this.testActor)))
+      val subscribedEventName = EventBus.nameWithTenant(tenant, e)
+      mediator ! Subscribe(subscribedEventName, Some("testgroup"), this.testActor)
+      expectMsg(SubscribeAck(Subscribe(subscribedEventName, Some("testgroup"), this.testActor)))
     }
   }
   override protected def createOffice[A <: AggregateRoot[_] : AggregateIdResolution : AggregateRootFactory : ClassTag](tenant: String): ActorRef = {

@@ -58,13 +58,6 @@ trait AkkaSpec extends TestKitBase
     withEventBus(Seq.empty)(action)
   }
 
-  protected def actorNameWithTenant(tenant: String, name: String) = {
-    tenant match {
-      case t if t == null || t.trim == "" => name
-      case _ => s"${tenant}_$name"
-    }
-  }
-
   protected def withEventBus(subscribedEvents : Seq[Class[_]])(action : ActorRef => Unit) = {
     system.eventStream.unsubscribe(this.testActor)
     var router : ActorRef = null
@@ -75,8 +68,8 @@ trait AkkaSpec extends TestKitBase
     }
 
     try {
-      router = system.actorOf(DeadLetterRouter.props(this.testActor), actorNameWithTenant(tenant, "DeadLetterRouter"))
-      busRef = system.actorOf(EventBus.props(tenant), actorNameWithTenant(tenant, "EventBus"))
+      router = system.actorOf(DeadLetterRouter.props(this.testActor), EventBus.nameWithTenant(tenant, "DeadLetterRouter"))
+      busRef = system.actorOf(EventBus.props(tenant), EventBus.nameWithTenant(tenant, "EventBus"))
       action(busRef)
     } finally {
       subscribedEvents.foreach { ec =>

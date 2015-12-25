@@ -12,23 +12,28 @@ import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
 trait OfficeSpec extends AkkaSpec {
+  private var _tenant: String = ""
+  override def tenant = _tenant
+
   implicit override val timeout: Timeout = 300 seconds
   protected def subscribeDomainEvents()
   protected def createOffice[A <: AggregateRoot[_]: AggregateIdResolution : AggregateRootFactory : ClassTag](tenant: String) : ActorRef
 
   it should "be able to create the aggregate from the command" in {
+    _tenant = "t1"
     subscribeDomainEvents()
 
-    val officeRef = createOffice[PriorityAggregate]("1")
+    val officeRef = createOffice[PriorityAggregate](tenant)
     officeRef ! CreatePriority("giangi")
 
     expectMsg(timeout.duration, PriorityCreated("giangi"))
   }
 
   it should "be able to route command to existing aggregate" in {
+    _tenant = "t2"
     subscribeDomainEvents()
 
-    val officeRef = createOffice[PriorityAggregate]("2")
+    val officeRef = createOffice[PriorityAggregate](tenant)
 
     officeRef ! CreatePriority("giangi")
     expectMsg(timeout.duration, PriorityCreated("giangi"))

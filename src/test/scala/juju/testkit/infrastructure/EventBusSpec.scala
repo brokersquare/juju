@@ -2,7 +2,7 @@ package juju.testkit.infrastructure
 
 import juju.infrastructure._
 import juju.sample.ColorAggregate.WeightChanged
-import juju.sample.ColorPriorityAggregate.AssignColor
+import juju.sample.ColorPriorityAggregate.{ColorAssigned, AssignColor}
 import juju.sample.PriorityAggregate._
 import juju.sample.{ColorAggregate, ColorPriorityAggregate, PriorityActivitiesSaga, PriorityAggregate}
 import juju.testkit.AkkaSpec
@@ -10,11 +10,11 @@ import juju.testkit.AkkaSpec
 import scala.language.existentials
 
 trait EventBusSpec extends AkkaSpec {
-  var testTenant = ""
-  override def tenant = testTenant
-/*
+  var _tenant = ""
+  override def tenant = _tenant
+
   it should "be able to register handlers" in {
-    testTenant = "t1"
+    _tenant = "t1"
     withEventBus { busRef =>
       busRef ! RegisterHandlers[PriorityAggregate]
 
@@ -27,7 +27,7 @@ trait EventBusSpec extends AkkaSpec {
   }
 
   it should "not able to send a message with no registered handler" in {
-    testTenant = "t2"
+    _tenant = "t2"
     withEventBus { busRef =>
       busRef ! CreatePriority("fake")
       expectMsg(timeout.duration, akka.actor.Status.Failure(HandlerNotDefinedException()))
@@ -35,7 +35,7 @@ trait EventBusSpec extends AkkaSpec {
   }
 
   it should "be able to send a command" in {
-    testTenant = "t3"
+    _tenant = "t3"
     withEventBus(Seq(classOf[PriorityCreated])) { busRef =>
       busRef ! RegisterHandlers[PriorityAggregate]
       expectMsgType[HandlersRegistered](timeout.duration)
@@ -45,7 +45,7 @@ trait EventBusSpec extends AkkaSpec {
   }
 
   it should "be able to register saga" in {
-    testTenant = "t4"
+    _tenant = "t4"
     withEventBus { busRef =>
       busRef ! RegisterSaga[PriorityActivitiesSaga]()
       expectMsgPF(timeout.duration) {
@@ -56,11 +56,11 @@ trait EventBusSpec extends AkkaSpec {
       }
     }
   }
-*/
+
   //TODO: test Activate messages
 
   it should "be able to execute saga workflow" in {
-    testTenant = "t5"
+    _tenant = "t5"
     withEventBus(Seq(classOf[WeightChanged])) { busRef =>
 
       busRef ! RegisterHandlers[PriorityAggregate]

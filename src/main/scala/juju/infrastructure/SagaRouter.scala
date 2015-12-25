@@ -12,15 +12,6 @@ object SagaRouter {
   }
 
   case class SagaIsUp(clazz: Class[_ <: Saga], actorRef: ActorRef, tenant: String, correlationId: String)
-
-  def nameWithTenant(tenant: String, name: String): String = {
-    tenant match {
-      case t if t == null || t.trim == "" => name
-      case _ => s"${tenant}_$name"
-    }
-  }
-
-  def nameWithTenant(tenant: String, message: Class[_]): String = nameWithTenant(tenant, message.getSimpleName)
 }
 
 abstract class SagaRouterFactory[S <: Saga : ClassTag] {
@@ -29,7 +20,7 @@ abstract class SagaRouterFactory[S <: Saga : ClassTag] {
   val className = implicitly[ClassTag[S]].runtimeClass.getSimpleName
 
   def routerName() : String = {
-    SagaRouter.nameWithTenant(tenant, className)
+    EventBus.nameWithTenant(tenant, className)
   }
 }
 

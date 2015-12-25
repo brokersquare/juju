@@ -13,14 +13,13 @@ import com.typesafe.config.ConfigFactory
 import juju.domain.Saga.{SagaCorrelationIdResolution, SagaHandlersResolution}
 import juju.domain.{Saga, SagaFactory}
 import juju.infrastructure.SagaRouter._
-import juju.infrastructure.{DomainEventsSubscribed, GetSubscribedDomainEvents, SagaRouterFactory, UpdateHandlers}
+import juju.infrastructure._
 import juju.messages._
 
 import scala.concurrent.Await
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration.{FiniteDuration, _}
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
-import scala.concurrent.duration._
 
 object ClusterSagaRouter {
   case class DispatcherMessage(index: Int, message: Message) extends InfrastructureMessage
@@ -41,8 +40,6 @@ object ClusterSagaRouter {
         case Success(ref) => ref
         case Failure(ex) => Await.ready(retrieveChild, 1 seconds).value.get.get
       }
-
-      //getOrCreateRegion(system, s"${routerName}Router", routerProps(tenant), routerMessageExtractor[S]())
     }
   }
 
@@ -137,6 +134,8 @@ class ClusterSagaProxy[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorre
 
 class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String) extends Actor with ActorLogging with Stash {
   import ClusterSagaRouter._
+  import EventBus._
+
   val address = Serialization.serializedActorPath(self)
   val mediator = DistributedPubSub(context.system).mediator
   val sagaName = ClusterSagaRouter.sagaName[S]()
@@ -220,14 +219,16 @@ class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorr
 
 class ClusterSagaRouterDispatcher[S <: Saga : ClassTag : SagaHandlersResolution](tenant: String) extends Actor with ActorLogging with Stash {
   import ClusterSagaRouter._
+  import EventBus._
+
   val index = self.path.name.toInt
   val address = Serialization.serializedActorPath(self)
   val mediator = DistributedPubSub(context.system).mediator
   val handlersResolution = implicitly[SagaHandlersResolution[S]]
 
   log.info(s"[$tenant]cluster saga router dispatcher $index created at $address")
-
-  var subscriptionsAckWaitingList = handlersResolution.resolve() map {e => Subscribe(nameWithTenant(tenant, e.getSimpleName), Some(nameWithTenant(tenant, sagaName[S]())), self)}
+  val subscriptionGroup = sagaName[S]()
+  var subscriptionsAckWaitingList = handlersResolution.resolve() map {e => Subscribe(nameWithTenant(tenant, e.getSimpleName), Some(nameWithTenant(tenant, subscriptionGroup)), self)}
 
   val sagaRegionName = nameWithTenant(tenant, sagaName[S]())
   val sagaRegion = ClusterSharding(context.system).shardRegion(sagaRegionName)
@@ -280,6 +281,7 @@ class ClusterSagaRouterDispatcher[S <: Saga : ClassTag : SagaHandlersResolution]
 
 class ClusterSagaRouterGateway[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String, sagaRouterRef: ActorRef) extends Actor with ActorLogging with Stash {
   import ClusterSagaRouter._
+  import EventBus._
 
   val sagaType = implicitly[ClassTag[S]].runtimeClass.asInstanceOf[Class[S]]
   val address = Serialization.serializedActorPath(self)

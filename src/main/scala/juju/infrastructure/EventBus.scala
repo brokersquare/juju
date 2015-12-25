@@ -15,6 +15,17 @@ import scala.language.existentials
 
 object EventBus {
   def props(tenant: String = "") = Props(classOf[EventBus], tenant)
+
+  def nameWithTenant(tenant: String, name: String): String = {
+    tenant match {
+      case t if t == null || t.trim == "" => name
+      case _ => s"${tenant}_$name"
+    }
+  }
+
+  def nameWithTenant(tenant: String, message: Class[_]): String = nameWithTenant(tenant, message.getSimpleName)
+
+  def nameWithTenant(tenant: String, message: Message): String = nameWithTenant(tenant, message.getClass)
 }
 
 case class HandlerNotDefinedException() extends Exception

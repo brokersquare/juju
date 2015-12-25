@@ -6,7 +6,7 @@ import akka.cluster.pubsub.DistributedPubSubMediator.{UnsubscribeAck, Publish, S
 import akka.cluster.sharding.{ClusterSharding, ShardRegion}
 import juju.domain.Saga.{SagaCorrelationIdResolution, SagaHandlersResolution}
 import juju.domain.{Saga, SagaFactory}
-import juju.infrastructure.SagaRouter
+import juju.infrastructure.{EventBus, SagaRouter}
 import juju.infrastructure.cluster.ClusterSagaRouter.SagaRouterStopped
 import juju.messages.DomainEvent
 import juju.testkit.ClusterDomainSpec
@@ -18,6 +18,8 @@ import scala.util.{Success, Try}
 
 class ClusterSagaRouterSpec extends ClusterDomainSpec("ClusterSagaRouter") with SagaRouterSpec {
   import SagaRouter._
+  import EventBus._
+
   val mediator = DistributedPubSub(system).mediator
 
   //var routers : Set[ActorRef] = Set.empty
