@@ -1,24 +1,21 @@
 package juju.testkit
-
 import java.util.{Calendar, Date}
 
-import akka.actor.{PoisonPill, ActorRef, ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem, PoisonPill, Props}
 import akka.pattern.gracefulStop
-import akka.testkit._
-import com.typesafe.config.{Config, ConfigFactory}
+import akka.testkit.{DefaultTimeout, ImplicitSender, TestKitBase, TestProbe}
+import com.typesafe.config.Config
 import com.typesafe.scalalogging.LazyLogging
-import juju.infrastructure.EventBus
+import juju.infrastructure.{EventBus, Node}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers, TryValues}
 
 import scala.concurrent.duration._
 
-class DomainSpec(test: String,  config: Config = ConfigFactory.load("domain.conf"))
-  extends { implicit val system = ActorSystem(test, config) }
-  with TestKitBase
+trait AkkaSpec extends TestKitBase
   with FlatSpecLike with Matchers with BeforeAndAfterAll with LazyLogging with TryValues
-  with DefaultTimeout with ImplicitSender
-{
-  behavior of test      //this will print the behavior of the test
+  with DefaultTimeout with ImplicitSender with Node {
+  val config : Config
+  implicit val system : ActorSystem
 
   override def beforeAll() = {
     System.setProperty("java.net.preferIPv4Stack", "true") //TODO: move property declaration to the build.sbt
@@ -56,16 +53,29 @@ class DomainSpec(test: String,  config: Config = ConfigFactory.load("domain.conf
     gracefulStop(this.testActor, 5 seconds)
   }
 
-  protected def withEventBus(action : ActorRef => Unit) = {
+
+  protected def withEventBus(action : ActorRef => Unit): Unit = {
+    withEventBus(Seq.empty)(action)
+  }
+
+  protected def withEventBus(subscribedEvents : Seq[Class[_]])(action : ActorRef => Unit) = {
     system.eventStream.unsubscribe(this.testActor)
     var router : ActorRef = null
     var busRef: ActorRef = null
 
+    subscribedEvents.foreach { ec =>
+      system.eventStream.subscribe(this.testActor, ec)
+    }
+
     try {
-      router = system.actorOf(DeadLetterRouter.props(this.testActor))
-      busRef = system.actorOf(EventBus.props())
+      router = system.actorOf(DeadLetterRouter.props(this.testActor), EventBus.nameWithTenant(tenant, "DeadLetterRouter"))
+      busRef = system.actorOf(EventBus.props(tenant), EventBus.nameWithTenant(tenant, "EventBus"))
       action(busRef)
     } finally {
+      subscribedEvents.foreach { ec =>
+        system.eventStream.subscribe(this.testActor, ec)
+      }
+
       system.eventStream.unsubscribe(this.testActor)
 
       if (router != null) router ! PoisonPill

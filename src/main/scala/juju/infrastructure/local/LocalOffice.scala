@@ -15,8 +15,9 @@ import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
 object LocalOffice {
-  implicit def localOfficeFactory[A <: AggregateRoot[_] : AggregateIdResolution : AggregateRootFactory : ClassTag](implicit system : ActorSystem) = {
+  implicit def localOfficeFactory[A <: AggregateRoot[_] : AggregateIdResolution : AggregateRootFactory : ClassTag](_tenant: String)(implicit system : ActorSystem) = {
     new OfficeFactory[A] {
+      override val tenant : String = _tenant
       override def getOrCreate: ActorRef = {
         val actorName = s"$officeName"
         implicit val timeout = Timeout(FiniteDuration(1, TimeUnit.SECONDS))
@@ -33,7 +34,7 @@ object LocalOffice {
 
 class LocalOffice[A <: AggregateRoot[_]](implicit ct: ClassTag[A], idResolver : AggregateIdResolution[A], aggregateFactory : AggregateRootFactory[A])
   extends Actor with ActorLogging {
-  val aggregateName = implicitly[ClassTag[A]].runtimeClass.getSimpleName //TODO: take it from the officefactory
+  val aggregateName = implicitly[ClassTag[A]].runtimeClass.getSimpleName //TODO: take it from an aggregate name service
 
   override def receive: Receive = {
     case cmd: Command =>
@@ -50,7 +51,7 @@ class LocalOffice[A <: AggregateRoot[_]](implicit ct: ClassTag[A], idResolver : 
       context.system.eventStream.publish(event)
     case UpdateHandlers(_) =>
       //log.debug(s"received update handlers => ignore (office cannot route command. Useful only for the saga router)")
-      sender ! akka.actor.Status.Success(s"$aggregateName")
+      sender ! akka.actor.Status.Success(aggregateName)
     case m =>
       log.debug(s"discard message $m")
   }

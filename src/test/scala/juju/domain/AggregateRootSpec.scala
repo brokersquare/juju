@@ -3,9 +3,9 @@ package juju.domain
 import akka.actor._
 import juju.sample.PriorityAggregate
 import juju.sample.PriorityAggregate.{PriorityIncreased, IncreasePriority, PriorityCreated, CreatePriority}
-import juju.testkit.DomainSpec
+import juju.testkit.LocalDomainSpec
 
-class AggregateRootSpec extends DomainSpec("AggregateRoot") {
+class AggregateRootSpec extends LocalDomainSpec("AggregateRoot") {
 
   it should "be able to send the first  message" in {
     val fakeRef = system.actorOf(Props(classOf[PriorityAggregate]))

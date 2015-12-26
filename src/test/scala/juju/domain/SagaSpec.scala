@@ -6,12 +6,12 @@ import juju.sample.ColorAggregate.ChangeWeight
 import juju.sample.ColorPriorityAggregate.ColorAssigned
 import juju.sample.PriorityActivitiesSaga
 import juju.sample.PriorityAggregate.PriorityIncreased
-import juju.testkit.DomainSpec
+import juju.testkit.LocalDomainSpec
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class SagaSpec extends DomainSpec("Saga") {
+class SagaSpec extends LocalDomainSpec("Saga") {
 
   it should "be able to send event to saga without trigger a command" in {
     val sagaRef = system.actorOf(Props(classOf[PriorityActivitiesSaga], 1, this.testActor), s"fakesaga-1")

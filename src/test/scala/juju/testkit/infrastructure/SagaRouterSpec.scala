@@ -2,67 +2,112 @@ package juju.testkit.infrastructure
 
 import akka.actor.Status.Success
 import akka.actor._
-import akka.pattern.gracefulStop
-import juju.infrastructure.SagaRouter._
-import juju.infrastructure.{Node, UpdateHandlers}
+import akka.util.Timeout
+import juju.domain.Saga.{SagaCorrelationIdResolution, SagaHandlersResolution}
+import juju.domain.{Saga, SagaFactory}
+import juju.infrastructure.SagaRouter.SagaIsUp
+import juju.infrastructure.UpdateHandlers
+import juju.messages.DomainEvent
 import juju.sample.ColorAggregate.ChangeWeight
 import juju.sample.ColorPriorityAggregate.ColorAssigned
 import juju.sample.PriorityActivitiesSaga
-import juju.sample.PriorityActivitiesSaga.{EchoWakeUp, PriorityActivitiesActivate, PublishEcho}
+import juju.sample.PriorityActivitiesSaga.{PriorityActivitiesActivate, EchoWakeUp, PublishEcho}
 import juju.sample.PriorityAggregate.PriorityIncreased
-import juju.testkit.DomainSpec
+import juju.testkit.AkkaSpec
 
 import scala.concurrent.duration._
+import scala.reflect.ClassTag
 
-abstract class SagaRouterSpec(prefix:String) extends DomainSpec(s"${prefix}SagaRouter") with Node {
+/*
+import akka.actor.Status.Success
+import akka.actor._
+import akka.util.Timeout
+import juju.domain.Saga.{SagaCorrelationIdResolution, SagaHandlersResolution}
+import juju.domain.{Saga, SagaFactory}
+import juju.infrastructure.UpdateHandlers
+import juju.messages.DomainEvent
+import juju.sample.ColorAggregate.ChangeWeight
+import juju.sample.ColorPriorityAggregate.ColorAssigned
+import juju.sample.PriorityActivitiesSaga
+import juju.sample.PriorityActivitiesSaga.{EchoWakeUp, PublishEcho}
+import juju.sample.PriorityAggregate.PriorityIncreased
+import juju.testkit.AkkaSpec
+
+import scala.concurrent.duration._
+import scala.reflect.ClassTag
+*/
+
+trait SagaRouterSpec extends AkkaSpec {
+  implicit override val timeout: Timeout = 300 seconds
+  protected def createSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String) : ActorRef
+  protected def publish(tenant: String, sagaRouterRef : ActorRef, event: DomainEvent)
+  protected def shutdownRouter[S <: Saga : ClassTag](tenant: String, sagaRouterRef : ActorRef)
+
   it should "be able to start the saga due to events and receive an emitted command" in {
-    val routerRef = router[PriorityActivitiesSaga]
+    val tenant = "T1"
+    val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant)
     routerRef ! UpdateHandlers(Map.empty + (classOf[ChangeWeight] -> this.testActor))
-    expectMsg(Success)
+    expectMsgType[Success](timeout.duration)
 
-    routerRef ! PriorityIncreased("x", 1)
-    routerRef ! ColorAssigned(1, "red")
-    expectMsg(3 seconds, ChangeWeight("red", 1))
-    gracefulStop(routerRef, 10 seconds)
+    publish(tenant, routerRef, PriorityIncreased("x", 1))
+    publish(tenant, routerRef, ColorAssigned(1, "red"))
+
+    expectMsgType[SagaIsUp](timeout.duration)
+
+    expectMsgPF(timeout.duration) {
+      case m@ChangeWeight("red", _) =>
+    }
+
+    shutdownRouter[PriorityActivitiesSaga](tenant, routerRef)
   }
 
   it should "not route domain events depending specific conditions" in {
-    val routerRef = router[PriorityActivitiesSaga]
+    val tenant = "T2"
+    val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant)
     routerRef ! UpdateHandlers(Map.empty + (classOf[ChangeWeight] -> this.testActor))
-    expectMsg(Success)
-    routerRef ! PriorityIncreased("x", -1)
-    routerRef ! ColorAssigned(-1, "red")
-    expectNoMsg()
-    gracefulStop(routerRef, 10 seconds)
+    expectMsgType[Success](timeout.duration)
+
+    publish(tenant, routerRef, PriorityIncreased("x", -1)) //-1 doesn't route event
+    publish(tenant, routerRef, ColorAssigned(-1, "red"))
+
+    expectNoMsg(3 seconds)
+    shutdownRouter[PriorityActivitiesSaga](tenant, routerRef)
   }
 
-
   it should "route wakeup event to all saga if registered" in {
-    val routerRef = router[PriorityActivitiesSaga]
+    val tenant = "T3"
+    val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant)
     routerRef ! UpdateHandlers(Map.empty + (classOf[PublishEcho] -> this.testActor))
-    expectMsg(Success)
-    routerRef ! ColorAssigned(1, "red")
-    routerRef ! ColorAssigned(2, "yellow")
+    expectMsgType[Success](timeout.duration)
+
+    publish(tenant, routerRef, ColorAssigned(1, "red"))
+    publish(tenant, routerRef, ColorAssigned(2, "yellow"))
+
+    expectMsgType[SagaIsUp](timeout.duration)
+    expectMsgType[SagaIsUp](timeout.duration)
 
     routerRef ! EchoWakeUp("hello world")
 
-    expectMsgAllOf(
+    expectMsgAllOf(timeout.duration,
       PublishEcho("echo from priority 1: hello world"),
       PublishEcho("echo from priority 2: hello world")
     )
-    gracefulStop(routerRef, 10 seconds)
+    shutdownRouter[PriorityActivitiesSaga](tenant, routerRef)
   }
 
   it should "activate saga by activate message" in {
-    val routerRef = router[PriorityActivitiesSaga]
+    val tenant = "T4"
+    val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant)
 
     routerRef ! UpdateHandlers(Map.empty + (classOf[PublishEcho] -> this.testActor))
-    expectMsg(Success)
+    expectMsgType[Success](timeout.duration)
     routerRef ! PriorityActivitiesActivate("1")
+
+    expectMsgType[SagaIsUp](timeout.duration)
     routerRef ! EchoWakeUp("hello world")
 
-    expectMsgAllOf(PublishEcho("echo from priority 1: hello world"))
-    gracefulStop(routerRef, 10 seconds)
+    expectMsgAllOf(timeout.duration, PublishEcho("echo from priority 1: hello world"))
+    shutdownRouter[PriorityActivitiesSaga](tenant, routerRef)
   }
 }
 

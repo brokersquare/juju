@@ -1,23 +1,24 @@
 package juju.testkit.infrastructure
 
-import akka.actor._
 import juju.infrastructure._
 import juju.sample.ColorAggregate.WeightChanged
-import juju.sample.ColorPriorityAggregate.{AssignColor, ColorAssigned}
+import juju.sample.ColorPriorityAggregate.{ColorAssigned, AssignColor}
 import juju.sample.PriorityAggregate._
 import juju.sample.{ColorAggregate, ColorPriorityAggregate, PriorityActivitiesSaga, PriorityAggregate}
-import juju.testkit.DomainSpec
+import juju.testkit.AkkaSpec
 
 import scala.language.existentials
 
-
-abstract class EventBusSpec(prefix:String) extends DomainSpec(s"${prefix}EventBus") with Node {
+trait EventBusSpec extends AkkaSpec {
+  var _tenant = ""
+  override def tenant = _tenant
 
   it should "be able to register handlers" in {
+    _tenant = "t1"
     withEventBus { busRef =>
       busRef ! RegisterHandlers[PriorityAggregate]
 
-      expectMsgPF() {
+      expectMsgPF(timeout.duration) {
         case HandlersRegistered(handlers) =>
           handlers should contain(classOf[CreatePriority])
           handlers should contain(classOf[IncreasePriority])
@@ -26,6 +27,7 @@ abstract class EventBusSpec(prefix:String) extends DomainSpec(s"${prefix}EventBu
   }
 
   it should "not able to send a message with no registered handler" in {
+    _tenant = "t2"
     withEventBus { busRef =>
       busRef ! CreatePriority("fake")
       expectMsg(akka.actor.Status.Failure(HandlerNotDefinedException))
@@ -33,19 +35,20 @@ abstract class EventBusSpec(prefix:String) extends DomainSpec(s"${prefix}EventBu
   }
 
   it should "be able to send a command" in {
-    withEventBus { busRef =>
-      system.eventStream.subscribe(this.testActor, classOf[PriorityCreated])
+    _tenant = "t3"
+    withEventBus(Seq(classOf[PriorityCreated])) { busRef =>
       busRef ! RegisterHandlers[PriorityAggregate]
-      expectMsgType[HandlersRegistered]
+      expectMsgType[HandlersRegistered](timeout.duration)
       busRef ! CreatePriority("fake")
-      expectMsg(PriorityCreated("fake"))
+      expectMsg(timeout.duration, PriorityCreated("fake"))
     }
   }
 
   it should "be able to register saga" in {
+    _tenant = "t4"
     withEventBus { busRef =>
       busRef ! RegisterSaga[PriorityActivitiesSaga]()
-      expectMsgPF() {
+      expectMsgPF(timeout.duration) {
         case DomainEventsSubscribed(events) =>
           events should contain(classOf[PriorityIncreased])
           events should contain(classOf[PriorityDecreased])
@@ -57,25 +60,28 @@ abstract class EventBusSpec(prefix:String) extends DomainSpec(s"${prefix}EventBu
   //TODO: test Activate messages
 
   it should "be able to execute saga workflow" in {
-    withEventBus { busRef =>
-      system.eventStream.subscribe(this.testActor, classOf[WeightChanged])
+    _tenant = "t5"
+    withEventBus(Seq(classOf[WeightChanged])) { busRef =>
+
       busRef ! RegisterHandlers[PriorityAggregate]
-      expectMsgType[HandlersRegistered]
+      expectMsgType[HandlersRegistered](timeout.duration)
 
       busRef ! RegisterHandlers[ColorAggregate]
-      expectMsgType[HandlersRegistered]
+      expectMsgType[HandlersRegistered](timeout.duration)
 
       busRef ! RegisterHandlers[ColorPriorityAggregate]
-      expectMsgType[HandlersRegistered]
+      expectMsgType[HandlersRegistered](timeout.duration)
 
       busRef ! RegisterSaga[PriorityActivitiesSaga]
-      expectMsgType[DomainEventsSubscribed]
+      expectMsgType[DomainEventsSubscribed](timeout.duration)
 
       busRef ! CreatePriority("x")
       busRef ! IncreasePriority("x")
       busRef ! AssignColor(1, "red")
 
-      expectMsg(WeightChanged("red", 1))
+      expectMsgPF(timeout.duration) {
+        case WeightChanged("red", _) =>
+      }
     }
   }
 
@@ -89,5 +95,4 @@ abstract class EventBusSpec(prefix:String) extends DomainSpec(s"${prefix}EventBu
     assert(false, "not yet implemented")
   }
   */
-
 }
