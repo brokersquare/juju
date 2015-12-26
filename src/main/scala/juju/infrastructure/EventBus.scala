@@ -17,14 +17,14 @@ object EventBus {
   def props() = Props(classOf[EventBus])
 }
 
-case class HandlerNotDefinedException() extends Exception
+case object HandlerNotDefinedException extends Exception
 case class MessageNotSupported(text: String) extends Exception(text)
 case class UpdateHandlers(handlers : Map[Class[_ <: Command], ActorRef]) extends InfrastructureMessage
 
 case class RegisterHandlers[A <: AggregateRoot[_]](implicit val officeFactory: OfficeFactory[A], val resolver: AggregateHandlersResolution[A]) extends InfrastructureMessage
 case class HandlersRegistered(handlers : Iterable[Class[_ <: Command]]) extends InfrastructureMessage
 case class RegisterSaga[S <: Saga](implicit val routerFactory : SagaRouterFactory[S], val resolver: SagaHandlersResolution[S]) extends InfrastructureMessage
-case class GetSubscribedDomainEvents() extends InfrastructureMessage
+case object GetSubscribedDomainEvents extends InfrastructureMessage
 case class DomainEventsSubscribed(events: Iterable[Class[_ <: DomainEvent]]) extends InfrastructureMessage
 
 class EventBus extends Actor with ActorLogging with Stash {
@@ -44,7 +44,7 @@ class EventBus extends Actor with ActorLogging with Stash {
 
       handlers.get(commandType) match {
         case Some(office) => office ! command
-        case None => sender ! akka.actor.Status.Failure(HandlerNotDefinedException())
+        case None => sender ! akka.actor.Status.Failure(HandlerNotDefinedException)
       }
 
     case activate : Activate =>
@@ -111,7 +111,7 @@ class EventBus extends Actor with ActorLogging with Stash {
 
       routerRef.ask(UpdateHandlers(handlers)).onSuccess {
         case results =>
-          routerRef.tell(GetSubscribedDomainEvents(), s)
+          routerRef.tell(GetSubscribedDomainEvents, s)
           log.debug(s"saga $routerRef registered")
       }
 

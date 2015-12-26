@@ -1,3 +1,3 @@
 package juju.messages
 
-case class Boot() extends InfrastructureMessage
+case object Boot extends InfrastructureMessage
