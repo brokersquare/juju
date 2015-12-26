@@ -60,7 +60,7 @@ class LocalSagaRouter[S <: Saga](tenant: String)(implicit ct: ClassTag[S], handl
   }
 
   override def receive: Receive = {
-    case e : GetSubscribedDomainEvents => sender ! DomainEventsSubscribed(subscribedEvents)
+    case e@GetSubscribedDomainEvents => sender ! DomainEventsSubscribed(subscribedEvents)
     case e : Activate =>
       log.debug(s"received activate $e message")
       getOrCreateSaga(e.correlationId)

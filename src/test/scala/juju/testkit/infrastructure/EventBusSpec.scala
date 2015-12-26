@@ -30,7 +30,7 @@ trait EventBusSpec extends AkkaSpec {
     _tenant = "t2"
     withEventBus { busRef =>
       busRef ! CreatePriority("fake")
-      expectMsg(timeout.duration, akka.actor.Status.Failure(HandlerNotDefinedException()))
+      expectMsg(akka.actor.Status.Failure(HandlerNotDefinedException))
     }
   }
 

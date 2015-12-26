@@ -32,7 +32,9 @@ object ClusterSagaRouter {
     override val tenant :String = _tenant
 
     override def getOrCreate: ActorRef = {
-      val actorName = s"$routerName"
+      val actorName = {
+        routerName()
+      }
       implicit val timeout = Timeout(FiniteDuration(1, TimeUnit.SECONDS))
       val retrieveChild = system.actorSelection(system.child(actorName)).resolveOne()
 
@@ -111,7 +113,7 @@ class ClusterSagaProxy[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorre
   var updateHandlersSender: Option[ActorRef] = None
 
   override def receive: Actor.Receive = {
-    case e : GetSubscribedDomainEvents =>
+    case e@GetSubscribedDomainEvents =>
       sender ! DomainEventsSubscribed(subscribedEvents)
     case UpdateHandlers(h) =>
       updateHandlersSender = Some(sender())
