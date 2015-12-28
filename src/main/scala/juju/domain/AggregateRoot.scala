@@ -25,6 +25,10 @@ object AggregateRoot {
   }
 }
 
+trait Handle[A <: Command] {
+  def handle(command: A) : Unit
+}
+
 abstract class AggregateRoot[S <: AggregateState]
   extends PersistentActor with ActorLogging {
 
@@ -39,7 +43,19 @@ abstract class AggregateRoot[S <: AggregateState]
   type AggregateStateFactory = PartialFunction[DomainEvent, S]
   val factory : AggregateStateFactory
 
-  def handle : Receive
+  private lazy val handlers = this.getClass.getDeclaredMethods
+    .filter(_.getParameterTypes.length == 1)
+    .filter( _.getName == classOf[Handle[_ <: Command]].getMethods.head.getName)
+    .filter(_.getParameterTypes.head != classOf[Command])
+
+  def handle : Receive = {
+    case cmd: Command if isCommandSupported(cmd) =>
+      val handler = handlers.filter(_.getParameterTypes.head == cmd.getClass).head
+      handler.invoke(this, cmd)
+  }
+
+  private def isCommandSupported(command: Command): Boolean =
+    handlers.exists(_.getParameterTypes.head == command.getClass)
 
   def nextState(event: DomainEvent): S = {
     stateOpt match {
