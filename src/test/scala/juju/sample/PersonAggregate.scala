@@ -1,8 +1,8 @@
-package juju.sample.conventions
+package juju.sample
 
-import juju.domain.{Handle, AggregateState, AggregateRoot}
-import juju.messages.{DomainEvent, Command}
-import juju.sample.conventions.PersonAggregate.{ChangeWeight, WeightChanged}
+import juju.domain.{AggregateRoot, AggregateState, Handle}
+import juju.messages.{Command, DomainEvent}
+import juju.sample.PersonAggregate.{ChangeWeight, WeightChanged}
 
 object PersonAggregate {
   case class ChangeWeight(name: String, weight: Int) extends Command
@@ -12,7 +12,6 @@ object PersonAggregate {
 case class PersonState(name: String = "", weight: Int = 0) extends AggregateState {
   override def apply = {
     case WeightChanged(c, w) => copy(weight = w)
-    case _ => ???
   }
 }
 
@@ -22,11 +21,7 @@ class PersonAggregate extends AggregateRoot[PersonState] with Handle[ChangeWeigh
     case _ => throw new IllegalArgumentException("Cannot create state from event different that WeightChanged type")
   }
 
-  /*override def handle : Receive = {
-    case ChangeWeight(c,w) => raise(WeightChanged(c,w))
-  }*/
   override def handle(command: ChangeWeight): Unit = command match {
     case ChangeWeight(c,w) => raise(WeightChanged(c,w))
-    case _ => ???
   }
 }

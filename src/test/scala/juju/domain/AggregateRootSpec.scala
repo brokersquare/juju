@@ -1,10 +1,9 @@
 package juju.domain
 
 import akka.actor._
-import juju.sample.PriorityAggregate
+import juju.sample.{PersonAggregate, PriorityAggregate}
 import juju.sample.PriorityAggregate.{PriorityIncreased, IncreasePriority, PriorityCreated, CreatePriority}
-import juju.sample.conventions.PersonAggregate
-import juju.sample.conventions.PersonAggregate.{WeightChanged, ChangeWeight}
+import PersonAggregate.{WeightChanged, ChangeWeight}
 import juju.testkit.LocalDomainSpec
 
 class AggregateRootSpec extends LocalDomainSpec("AggregateRoot") {
