@@ -1,9 +1,14 @@
 package juju.domain.resolvers
 
+import juju.domain.AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution}
+import juju.domain.{AggregateRoot, AggregateRootFactory}
 import juju.messages.Command
 import juju.sample.PersonAggregate.{ChangeWeight, WeightChanged}
-import juju.sample.{ColorAggregate, PersonAggregate}
+import juju.sample.PriorityAggregate.{PriorityCreated, CreatePriority}
+import juju.sample.{ColorAggregate, PersonAggregate, PriorityAggregate}
 import juju.testkit.LocalDomainSpec
+
+import scala.reflect.ClassTag
 
 class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
 
@@ -42,20 +47,38 @@ class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
     } should have message "Command 'CommandWithInvalidAnnotation' have no Aggregate id field 'notexistingfield'"
   }
 
-/*
-
   it should "be able to use convention from office" in {
-    //    import ByConventions._
-    //val officeRef = LocalOffice.localOfficeFactory[PersonAggregate](tenant).getOrCreate
-    //officeRef ! ChangeWeight("giangi", 80)
+    import juju.infrastructure.local.LocalOffice
 
-    //expectMsg(timeout.duration, WeightChanged("giangi", 80))
-    assert(false, "not yet implemented")
+    implicit def idResolution[A <: AggregateRoot[_] : ClassTag] : AggregateIdResolution[A] = ByConventions.idResolution[A]()
+    implicit def factory[A <: AggregateRoot[_] : ClassTag] : AggregateRootFactory[A] = ByConventions.factory[A]()
+    implicit def handlersResolution[A <: AggregateRoot[_] : ClassTag] : AggregateHandlersResolution[A] = ByConventions.handlersResolution[A]()
+
+    system.eventStream.subscribe(this.testActor, classOf[WeightChanged])
+
+    val officeRef = LocalOffice.localOfficeFactory[PersonAggregate](tenant).getOrCreate
+    officeRef ! ChangeWeight("giangi", 80)
+
+    expectMsg(timeout.duration, WeightChanged("giangi", 80))
   }
 
   it should "be able to override convention from office with more specific type" in {
-    assert(false, "not yet implemented")
-  }*/
+    import juju.infrastructure.local.LocalOffice
+
+    implicit def idResolution[A <: AggregateRoot[_] : ClassTag] : AggregateIdResolution[A] = ByConventions.idResolution[A]()
+    implicit def factory[A <: AggregateRoot[_] : ClassTag] : AggregateRootFactory[A] = ByConventions.factory[A]()
+    implicit def handlersResolution[A <: AggregateRoot[_] : ClassTag] : AggregateHandlersResolution[A] = ByConventions.handlersResolution[A]()
+
+    implicit val priorityAggregateIdResolution = PriorityAggregate.idResolution
+    implicit val priorityAggregateHandlersResolution = PriorityAggregate.handlersResolution
+
+    system.eventStream.subscribe(this.testActor, classOf[PriorityCreated])
+
+    val officeRef = LocalOffice.localOfficeFactory[PriorityAggregate](tenant).getOrCreate
+    officeRef ! CreatePriority("giangi")
+
+    expectMsg(timeout.duration, PriorityCreated("giangi"))
+  }
 
   case class CommandWithNoAnnotation(dummy: String) extends Command
   @AggregateIdField(fieldname = "notexistingfield") case class CommandWithInvalidAnnotation(dummy: String) extends Command
