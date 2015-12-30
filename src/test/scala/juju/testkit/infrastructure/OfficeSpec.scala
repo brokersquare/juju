@@ -59,4 +59,4 @@ trait OfficeSpec extends AkkaSpec {
      assert(false, "not yet implemented")
    }
    */
- }
+}

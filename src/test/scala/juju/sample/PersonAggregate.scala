@@ -1,11 +1,12 @@
 package juju.sample
 
+import juju.domain.resolvers.AggregateIdField
 import juju.domain.{AggregateRoot, AggregateState, Handle}
 import juju.messages.{Command, DomainEvent}
 import juju.sample.PersonAggregate.{ChangeWeight, WeightChanged}
 
 object PersonAggregate {
-  case class ChangeWeight(name: String, weight: Int) extends Command
+  @AggregateIdField(fieldname = "name") case class ChangeWeight(name: String, weight: Int) extends Command
   case class WeightChanged(name: String, weight: Int) extends DomainEvent
 }
 
