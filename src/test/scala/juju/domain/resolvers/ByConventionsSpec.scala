@@ -30,23 +30,19 @@ class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
     aggregateId shouldBe "giangi"
   }
 
-  it should "throw error if aggregate id from command byConvention resolver doesn't exist" in {
-    /*an [IllegalArgumentException] shouldBe
-      thrownBy(ByConventions.idResolution[PersonAggregate]().resolve(CommandWithNoAnnotation("giangi"))) should have message ""
-  */
+  it should "throw error if aggregate id from command byConvention resolver doesn't find AggregateIdField annotation" in {
     the [IllegalArgumentException] thrownBy {
       ByConventions.idResolution[PersonAggregate]().resolve(CommandWithNoAnnotation("giangi"))
     } should have message "Not provided AggregateIdField annotation for command 'CommandWithNoAnnotation'. Please set annotation or specify an id resolver for type 'PersonAggregate'"
   }
+
+  it should "throw error if aggregate id from command byConvention resolver doesn't exist" in {
+    the [NoSuchMethodError] thrownBy {
+      ByConventions.idResolution[PersonAggregate]().resolve(CommandWithInvalidAnnotation("giangi"))
+    } should have message "Command 'CommandWithInvalidAnnotation' have no Aggregate id field 'notexistingfield'"
+  }
+
 /*
-  it should "throw error if aggregate id from command byConvention resolver doesn't find AggregateIdField annotation" in {
-    assert(false, "not yet implemented")
-  }
-
-  it should "take first annotation if aggregate id from command byConvention resolver returns more than one AggregateIdField annotations" in {
-    assert(false, "not yet implemented")
-  }
-
 
   it should "be able to use convention from office" in {
     //    import ByConventions._

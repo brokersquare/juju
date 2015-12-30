@@ -1,12 +1,13 @@
 package juju.domain.resolvers
 
 import akka.actor.Props
-import juju.domain.{AggregateRootFactory, Handle, AggregateRoot}
-import juju.domain.AggregateRoot.{AggregateIdResolution, AggregateHandlersResolution}
+import juju.domain.AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution}
+import juju.domain.{AggregateRoot, AggregateRootFactory, Handle}
 import juju.messages.Command
-import scala.reflect.runtime.{universe => ru}
 
 import scala.reflect.ClassTag
+import scala.reflect.runtime.{universe => ru}
+import scala.util.{Failure, Success, Try}
 
 object ByConventions {
   implicit def handlersResolution[A <: AggregateRoot[_] : ClassTag]() = new AggregateHandlersResolution[A] {
@@ -27,22 +28,17 @@ object ByConventions {
 
       val commandClass = command.getClass
       val annotation = commandClass.getDeclaredAnnotation[AggregateIdField](classOf[AggregateIdField])
-      annotation match {
-        case null => throw new IllegalArgumentException(s"Not provided AggregateIdField annotation for command '${commandClass.getSimpleName}'. Please set annotation or specify an id resolver for type '$aggregateTypename'")
-        case _ =>
-          val fieldname = annotation.fieldname()
-          val method = commandClass.getMethod(fieldname)
-          method.invoke(command).asInstanceOf[String]
+      if (annotation == null) {
+        throw new IllegalArgumentException(s"Not provided AggregateIdField annotation for command '${commandClass.getSimpleName}'. Please set annotation or specify an id resolver for type '$aggregateTypename'")
       }
-    }
 
-    private def getTypeTag[T: ru.TypeTag](obj: T) = ru.typeTag[T]
-    private def junk[T: ru.TypeTag](v: T) = {
-      val t = implicitly[ru.TypeTag[T]]
-      t.tpe.typeArgs.map {
-        a=>
-        val m = ru.runtimeMirror(getClass.getClassLoader)
-        m.runtimeClass(a.typeSymbol.asClass)
+      val fieldname = annotation.fieldname()
+
+      Try {
+        commandClass.getMethod(fieldname)
+      } match {
+        case Success(method) => method.invoke(command).asInstanceOf[String]
+        case Failure(e) => throw new NoSuchMethodError(s"Command '${commandClass.getSimpleName}' have no Aggregate id field '$fieldname'")
       }
     }
   }
