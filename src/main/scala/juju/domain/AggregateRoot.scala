@@ -15,6 +15,12 @@ trait AggregateState {
   def apply: StateMachine
 }
 
+case class EmptyState() extends AggregateState {
+  override def apply = {
+    case _ => EmptyState()
+  }
+}
+
 object AggregateRoot {
   trait AggregateIdResolution[A <: AggregateRoot[_]] {
     def resolve(command: Command) : String

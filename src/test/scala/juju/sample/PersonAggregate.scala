@@ -6,7 +6,7 @@ import juju.messages.{Command, DomainEvent}
 import juju.sample.PersonAggregate.{ChangeWeight, WeightChanged}
 
 object PersonAggregate {
-  @AggregateIdField(fieldname = "name") case class ChangeWeight(name: String, weight: Int) extends Command
+  case class ChangeWeight(name: String, weight: Int) extends Command
   case class WeightChanged(name: String, weight: Int) extends DomainEvent
 }
 
@@ -22,7 +22,7 @@ class PersonAggregate extends AggregateRoot[PersonState] with Handle[ChangeWeigh
     case _ => throw new IllegalArgumentException("Cannot create state from event different that WeightChanged type")
   }
 
-  override def handle(command: ChangeWeight): Unit = command match {
+  @AggregateIdField(fieldname = "name") override def handle(command: ChangeWeight): Unit = command match {
     case ChangeWeight(c,w) => raise(WeightChanged(c,w))
   }
 }
