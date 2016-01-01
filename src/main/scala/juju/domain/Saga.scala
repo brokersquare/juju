@@ -34,17 +34,32 @@ trait Saga extends PersistentActor with ActorLogging {
   log.debug(s"created Saga ${this.getClass.getCanonicalName} with id $sagaId")
   override def persistenceId: String = sagaId
 
+  private lazy val appliers = this.getClass.getDeclaredMethods
+    .filter(_.getParameterTypes.length == 1)
+    .filter( _.getName == "apply")
+    .filter(_.getParameterTypes.head != classOf[DomainEvent])
+
+
   /**
    * Event handler called on state transition
    */
-  def applyEvent: PartialFunction[DomainEvent, Unit]
+  def applyEvent: PartialFunction[DomainEvent, Unit] = {
+    case event: DomainEvent if isDomainEventSupported(event) =>
+      val applier = appliers.filter(_.getParameterTypes.head == event.getClass).head
+      applier.invoke(this, event)
+  }
+
+  private def isDomainEventSupported(event: DomainEvent): Boolean =
+    appliers.exists(_.getParameterTypes.head == event.getClass)
 
   /**
    * Defines business process logic (state transitions).
    * State transition happens when raise(event) is called.
    * No state transition indicates the current event message could have been received out-of-order.
    */
-  def receiveEvent: Receive
+  def receiveEvent: Receive = {
+    case e: DomainEvent => raise(e)
+  }
 
 
   protected def deliverCommand(commandRouter: ActorRef, command: Command): Future[Any] = {

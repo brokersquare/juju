@@ -4,7 +4,7 @@ import java.lang.reflect.Method
 
 import akka.actor.Props
 import juju.domain.AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution}
-import juju.domain.{AggregateRoot, AggregateRootFactory, Handle}
+import juju.domain.{AggregateRoot, AggregateRootFactory}
 import juju.messages.Command
 
 import scala.reflect.ClassTag
@@ -14,11 +14,11 @@ import scala.util.{Failure, Success, Try}
 object ByConventions {
   private def handleMethods[A <: AggregateRoot[_] : ClassTag]() : Seq[Method] = implicitly[ClassTag[A]].runtimeClass.getDeclaredMethods
     .filter(_.getParameterTypes.length == 1)
-    .filter(_.getName == classOf[Handle[_ <: Command]].getMethods.head.getName)
+    .filter(_.getName == "handle")
 
   implicit def handlersResolution[A <: AggregateRoot[_] : ClassTag]() = new AggregateHandlersResolution[A] {
     override def resolve(): Seq[Class[_ <: Command]] = handleMethods[A]()
-      .filter(_.getName == classOf[Handle[_ <: Command]].getMethods.head.getName)
+      .filter(_.getName == "handle")
       .map(_.getParameterTypes.head.asInstanceOf[Class[_ <: Command]])
       .filter(_ != classOf[Command])
   }
@@ -35,11 +35,18 @@ object ByConventions {
       val commandClass = command.getClass
       val handle = handlers.filter(_.getGenericParameterTypes.head == commandClass).head
       val annotation = handle.getDeclaredAnnotation[AggregateIdField](classOf[AggregateIdField])
-      if (annotation == null) {
-        throw new IllegalArgumentException(s"Not provided AggregateIdField annotation for command '${commandClass.getSimpleName}'. Please set annotation or specify an id resolver for type '$aggregateTypename'")
-      }
 
-      val fieldname = annotation.fieldname()
+      val fieldname = Option(annotation) match {
+        case None =>
+          val methodWithNameAggregateId = commandClass.getMethods.find(_.getName == s"${aggregateTypename}Id")
+          val methodWithNameId = commandClass.getMethods.find(_.getName == "Id")
+          (methodWithNameAggregateId getOrElse {
+            methodWithNameId getOrElse {
+              throw new IllegalArgumentException(s"Not provided AggregateIdField annotation for command '${commandClass.getSimpleName}'. Please set annotation or specify an id resolver for type '$aggregateTypename'")
+            }
+          }).getName
+        case Some(a) => a.fieldname()
+      }
 
       Try {
         commandClass.getMethod(fieldname)

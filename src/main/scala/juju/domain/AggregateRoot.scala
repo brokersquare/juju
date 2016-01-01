@@ -31,9 +31,9 @@ object AggregateRoot {
   }
 }
 
-trait Handle[A <: Command] {
-  def handle(command: A) : Unit
-}
+/*trait Handle[C <: Command] {
+  def handle(command: C) : Unit
+}*/
 
 abstract class AggregateRoot[S <: AggregateState]
   extends PersistentActor with ActorLogging {
@@ -51,7 +51,8 @@ abstract class AggregateRoot[S <: AggregateState]
 
   private lazy val handlers = this.getClass.getDeclaredMethods
     .filter(_.getParameterTypes.length == 1)
-    .filter( _.getName == classOf[Handle[_ <: Command]].getMethods.head.getName)
+    .filter( _.getName == "handle")
+    //.filter( _.getName == classOf[Handle[_ <: Command]].getMethods.head.getName)
     .filter(_.getParameterTypes.head != classOf[Command])
 
   def handle : Receive = {
