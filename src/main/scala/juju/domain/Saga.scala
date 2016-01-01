@@ -39,6 +39,10 @@ trait Saga extends PersistentActor with ActorLogging {
     .filter( _.getName == "apply")
     .filter(_.getParameterTypes.head != classOf[DomainEvent])
 
+  private lazy val wakeups = this.getClass.getDeclaredMethods
+    .filter(_.getParameterTypes.length == 1)
+    .filter( _.getName == "wakeup")
+    .filter(_.getParameterTypes.head != classOf[WakeUp])
 
   /**
    * Event handler called on state transition
@@ -52,6 +56,9 @@ trait Saga extends PersistentActor with ActorLogging {
   private def isDomainEventSupported(event: DomainEvent): Boolean =
     appliers.exists(_.getParameterTypes.head == event.getClass)
 
+  private def isWakeupSupported(wakeup: WakeUp): Boolean =
+    wakeups.exists(_.getParameterTypes.head == wakeup.getClass)
+
   /**
    * Defines business process logic (state transitions).
    * State transition happens when raise(event) is called.
@@ -59,6 +66,9 @@ trait Saga extends PersistentActor with ActorLogging {
    */
   def receiveEvent: Receive = {
     case e: DomainEvent => raise(e)
+    case w: WakeUp if isWakeupSupported(w) =>
+      val wakeup = wakeups.filter(_.getParameterTypes.head == w.getClass).head
+      wakeup.invoke(this, w)
   }
 
 
