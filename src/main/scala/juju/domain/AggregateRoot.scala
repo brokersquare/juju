@@ -31,10 +31,6 @@ object AggregateRoot {
   }
 }
 
-/*trait Handle[C <: Command] {
-  def handle(command: C) : Unit
-}*/
-
 abstract class AggregateRoot[S <: AggregateState]
   extends PersistentActor with ActorLogging {
 
@@ -43,7 +39,7 @@ abstract class AggregateRoot[S <: AggregateState]
   log.debug(s"created AggregateRoot ${this.getClass.getCanonicalName} with id $id")
   private var stateOpt: Option[S] = None
 
-  def isStateInitialized = !stateOpt.isEmpty
+  def isStateInitialized = stateOpt.isDefined
   protected def state = if (isStateInitialized) stateOpt.get else throw new AggregateRootNotInitializedException
 
   type AggregateStateFactory = PartialFunction[DomainEvent, S]
@@ -52,7 +48,6 @@ abstract class AggregateRoot[S <: AggregateState]
   private lazy val handlers = this.getClass.getDeclaredMethods
     .filter(_.getParameterTypes.length == 1)
     .filter( _.getName == "handle")
-    //.filter( _.getName == classOf[Handle[_ <: Command]].getMethods.head.getName)
     .filter(_.getParameterTypes.head != classOf[Command])
 
   def handle : Receive = {

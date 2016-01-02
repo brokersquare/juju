@@ -2,8 +2,9 @@ package juju.sample
 
 import akka.actor.ActorRef
 import juju.domain.Saga
-import juju.messages.{DomainEvent, Command, WakeUp, Activate}
-import juju.sample.AveragePersonWeightSaga.{PublishAverageWeight, PublishWakeUp, PublishRequested}
+import juju.domain.resolvers.ActivatedBy
+import juju.messages.{Activate, Command, DomainEvent, WakeUp}
+import juju.sample.AveragePersonWeightSaga.{ActivateAveragePersonWeight, PublishAverageWeight, PublishRequested, PublishWakeUp}
 import juju.sample.PersonAggregate.WeightChanged
 
 object AveragePersonWeightSaga {
@@ -13,6 +14,7 @@ object AveragePersonWeightSaga {
   case class PublishRequested() extends DomainEvent
 }
 
+@ActivatedBy(messages = Array(classOf[ActivateAveragePersonWeight]))
 class AveragePersonWeightSaga(commandRouter: ActorRef) extends Saga {
   var weights : Map[String, Int] = Map.empty
   var average = 0
@@ -25,12 +27,12 @@ class AveragePersonWeightSaga(commandRouter: ActorRef) extends Saga {
     average = newAverage
   }
 
-  def apply(event: PublishRequested): Unit = {
+  def apply(event: PublishRequested): Unit =
     if (changed) {
       deliverCommand(commandRouter, PublishAverageWeight(average))
       changed = false
     }
-  }
+
 
   def wakeup(wakeup: PublishWakeUp): Unit = raise(PublishRequested())
 }

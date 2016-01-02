@@ -2,9 +2,10 @@ package juju.domain.resolvers
 
 import juju.domain.AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution}
 import juju.domain._
+import juju.sample.AveragePersonWeightSaga.{PublishRequested, PublishWakeUp}
 import juju.sample.PersonAggregate._
 import juju.sample.PriorityAggregate.{CreatePriority, PriorityCreated}
-import juju.sample.{ColorAggregate, PersonAggregate, PriorityAggregate}
+import juju.sample._
 import juju.testkit.LocalDomainSpec
 
 import scala.reflect.ClassTag
@@ -12,12 +13,12 @@ import scala.reflect.ClassTag
 class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
 
   it should "retrieves commands supported by the aggregate" in {
-    val supportedCommands = ByConventions.handlersResolution[PersonAggregate]().resolve()
+    val supportedCommands = ByConventions.aggregateHandlersResolution[PersonAggregate]().resolve()
     supportedCommands should contain allOf (classOf[CreatePerson], classOf[ChangeWeight], classOf[ChangeHeight])
   }
 
   it should "returns empty if aggregate doesn't provide handle specific methods" in {
-    val supportedCommands = ByConventions.handlersResolution[ColorAggregate]().resolve()
+    val supportedCommands = ByConventions.aggregateHandlersResolution[ColorAggregate]().resolve()
     supportedCommands should be ('empty)
   }
 
@@ -57,7 +58,7 @@ class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
 
     implicit def idResolution[A <: AggregateRoot[_] : ClassTag] : AggregateIdResolution[A] = ByConventions.idResolution[A]()
     implicit def factory[A <: AggregateRoot[_] : ClassTag] : AggregateRootFactory[A] = ByConventions.factory[A]()
-    implicit def handlersResolution[A <: AggregateRoot[_] : ClassTag] : AggregateHandlersResolution[A] = ByConventions.handlersResolution[A]()
+    implicit def handlersResolution[A <: AggregateRoot[_] : ClassTag] : AggregateHandlersResolution[A] = ByConventions.aggregateHandlersResolution[A]()
 
     system.eventStream.subscribe(this.testActor, classOf[PersonCreated])
     system.eventStream.subscribe(this.testActor, classOf[WeightChanged])
@@ -76,7 +77,7 @@ class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
 
     implicit def idResolution[A <: AggregateRoot[_] : ClassTag] : AggregateIdResolution[A] = ByConventions.idResolution[A]()
     implicit def factory[A <: AggregateRoot[_] : ClassTag] : AggregateRootFactory[A] = ByConventions.factory[A]()
-    implicit def handlersResolution[A <: AggregateRoot[_] : ClassTag] : AggregateHandlersResolution[A] = ByConventions.handlersResolution[A]()
+    implicit def handlersResolution[A <: AggregateRoot[_] : ClassTag] : AggregateHandlersResolution[A] = ByConventions.aggregateHandlersResolution[A]()
 
     implicit val priorityAggregateIdResolution = PriorityAggregate.idResolution
     implicit val priorityAggregateHandlersResolution = PriorityAggregate.handlersResolution
@@ -89,14 +90,25 @@ class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
     expectMsg(timeout.duration, PriorityCreated("giangi"))
   }
 
-  /* it should "retrieves events supported by the saga" in {
-    /*
-    val supportedCommands = ByConventions.handlersResolution[PersonAggregate]().resolve()
-    supportedCommands should have length 1
-    supportedCommands.head shouldBe classOf[ChangeWeight]
-    */
-    assert(false, "not yet implemented")
-  }*/
+   it should "retrieves events supported by the saga" in {
+     val supportedEvents = ByConventions.sagaHandlersResolution[AveragePersonWeightSaga]().resolve()
+     supportedEvents should contain allOf (classOf[WeightChanged], classOf[PublishRequested])
+  }
+
+  it should "returns empty if saga doesn't provide apply specific methods" in {
+    val supportedEvents = ByConventions.sagaHandlersResolution[PriorityActivitiesSaga]().resolve()
+    supportedEvents should be ('empty)
+  }
+
+  it should "retrieves wakeups supported by the saga" in {
+    val supportedWakeups = ByConventions.sagaHandlersResolution[AveragePersonWeightSaga]().wakeUpBy()
+    supportedWakeups should contain (classOf[PublishWakeUp])
+  }
+
+  it should "returns empty if saga doesn't provide wakeup specific methods" in {
+    val supportedEvents = ByConventions.sagaHandlersResolution[PriorityActivitiesSaga]().wakeUpBy()
+    supportedEvents should be ('empty)
+  }
 
 
   class AggregateWithInvalidAnnotation extends AggregateRoot[EmptyState] {
