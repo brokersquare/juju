@@ -15,6 +15,12 @@ trait AggregateState {
   def apply: StateMachine
 }
 
+case class EmptyState() extends AggregateState {
+  override def apply = {
+    case _ => EmptyState()
+  }
+}
+
 object AggregateRoot {
   trait AggregateIdResolution[A <: AggregateRoot[_]] {
     def resolve(command: Command) : String
@@ -33,13 +39,25 @@ abstract class AggregateRoot[S <: AggregateState]
   log.debug(s"created AggregateRoot ${this.getClass.getCanonicalName} with id $id")
   private var stateOpt: Option[S] = None
 
-  def isStateInitialized = !stateOpt.isEmpty
+  def isStateInitialized = stateOpt.isDefined
   protected def state = if (isStateInitialized) stateOpt.get else throw new AggregateRootNotInitializedException
 
   type AggregateStateFactory = PartialFunction[DomainEvent, S]
   val factory : AggregateStateFactory
 
-  def handle : Receive
+  private lazy val handlers = this.getClass.getDeclaredMethods
+    .filter(_.getParameterTypes.length == 1)
+    .filter( _.getName == "handle")
+    .filter(_.getParameterTypes.head != classOf[Command])
+
+  def handle : Receive = {
+    case cmd: Command if isCommandSupported(cmd) =>
+      val handler = handlers.filter(_.getParameterTypes.head == cmd.getClass).head
+      handler.invoke(this, cmd)
+  }
+
+  private def isCommandSupported(command: Command): Boolean =
+    handlers.exists(_.getParameterTypes.head == command.getClass)
 
   def nextState(event: DomainEvent): S = {
     stateOpt match {
