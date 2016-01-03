@@ -64,6 +64,18 @@ object ByConventions {
     override def wakeUpBy(): Seq[Class[_ <: WakeUp]] = handleMethods[S]("wakeup")
       .map(_.getParameterTypes.head.asInstanceOf[Class[_ <: WakeUp]])
       .filter(_ != classOf[WakeUp])
-    override def activateBy() : Option[Class[_ <: Activate]] = None
+    override def activateBy() : Option[Class[_ <: Activate]] = {
+      val sagaClass = implicitly[ClassTag[S]].runtimeClass
+      val activate = sagaClass.getDeclaredAnnotations find { _.annotationType() == classOf[ActivatedBy] }
+
+      val t = activate.map (_.asInstanceOf[ActivatedBy].message)
+
+      val res = if (t.isDefined && classOf[Activate].isAssignableFrom(t.get)) {
+        Some(t.get).asInstanceOf[Option[Class[_ <: Activate]]]
+      } else {
+        None.asInstanceOf[Option[Class[_ <: Activate]]]
+      }
+      res
+    }
   }
 }

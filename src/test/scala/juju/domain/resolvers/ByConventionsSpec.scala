@@ -2,7 +2,8 @@ package juju.domain.resolvers
 
 import juju.domain.AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution}
 import juju.domain._
-import juju.sample.AveragePersonWeightSaga.{PublishRequested, PublishWakeUp}
+import juju.messages.Activate
+import juju.sample.AveragePersonWeightSaga.{PublishWakeUp, PublishRequested}
 import juju.sample.PersonAggregate._
 import juju.sample.PriorityAggregate.{CreatePriority, PriorityCreated}
 import juju.sample._
@@ -100,14 +101,26 @@ class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
     supportedEvents should be ('empty)
   }
 
-  it should "retrieves wakeups supported by the saga" in {
+  it should "retrieves wakeup supported by the saga" in {
     val supportedWakeups = ByConventions.sagaHandlersResolution[AveragePersonWeightSaga]().wakeUpBy()
     supportedWakeups should contain (classOf[PublishWakeUp])
   }
 
   it should "returns empty if saga doesn't provide wakeup specific methods" in {
-    val supportedEvents = ByConventions.sagaHandlersResolution[PriorityActivitiesSaga]().wakeUpBy()
-    supportedEvents should be ('empty)
+    val supportedWakeups = ByConventions.sagaHandlersResolution[PriorityActivitiesSaga]().wakeUpBy()
+    supportedWakeups should be ('empty)
+  }
+
+  it should "retrieves activate supported by the saga" in {
+    val supportedActivate = ByConventions.sagaHandlersResolution[SagaWithActivation]().activateBy()
+    supportedActivate should not be None
+    val clazz = supportedActivate.get.getName
+    clazz should be (classOf[SagaActivate].getName)
+  }
+
+  it should "returns None if saga doesn't provide activate annotation" in {
+    val supportedActivates = ByConventions.sagaHandlersResolution[SagaWithNoActivation]().activateBy()
+    supportedActivates should be (None)
   }
 
 
@@ -131,4 +144,8 @@ class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
       case _ =>
     }
   }
+
+  case class SagaActivate(override val correlationId: String) extends Activate
+  @ActivatedBy(message = classOf[SagaActivate]) class SagaWithActivation extends Saga {}
+  class SagaWithNoActivation extends Saga {}
 }
