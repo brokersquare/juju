@@ -12,7 +12,7 @@ object AveragePersonWeightSaga {
   case class PublishRequested() extends DomainEvent
 }
 
-class AveragePersonWeightSaga(commandRouter: ActorRef) extends Saga {
+class AveragePersonWeightSaga(correlationId: String, commandRouter: ActorRef) extends Saga {
   var weights : Map[String, Int] = Map.empty
   var average = 0
   var changed = false
