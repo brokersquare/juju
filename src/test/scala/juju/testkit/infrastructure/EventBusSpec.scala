@@ -1,13 +1,18 @@
 package juju.testkit.infrastructure
 
+import juju.domain.AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution}
+import juju.domain.resolvers.ByConventions
+import juju.domain.{AggregateRoot, AggregateRootFactory}
 import juju.infrastructure._
 import juju.sample.ColorAggregate.WeightChanged
-import juju.sample.ColorPriorityAggregate.{ColorAssigned, AssignColor}
+import juju.sample.ColorPriorityAggregate.{AssignColor, ColorAssigned}
+import juju.sample.PersonAggregate._
 import juju.sample.PriorityAggregate._
-import juju.sample.{ColorAggregate, ColorPriorityAggregate, PriorityActivitiesSaga, PriorityAggregate}
+import juju.sample.{ColorAggregate, ColorPriorityAggregate, PriorityActivitiesSaga, PriorityAggregate, _}
 import juju.testkit.AkkaSpec
 
 import scala.language.existentials
+import scala.reflect.ClassTag
 
 trait EventBusSpec extends AkkaSpec {
   var _tenant = ""
@@ -44,8 +49,26 @@ trait EventBusSpec extends AkkaSpec {
     }
   }
 
-  it should "be able to register saga" in {
+  it should "be able to delivery messages between aggregates" in {
     _tenant = "t4"
+    implicit def idResolution[A <: AggregateRoot[_] : ClassTag]: AggregateIdResolution[A] = ByConventions.aggregateIdResolution[A]()
+    implicit def factory[A <: AggregateRoot[_] : ClassTag]: AggregateRootFactory[A] = ByConventions.aggregateFactory[A]()
+    implicit def handlersResolution[A <: AggregateRoot[_] : ClassTag]: AggregateHandlersResolution[A] = ByConventions.aggregateHandlersResolution[A]()
+
+    withEventBus(Seq(classOf[PostcardDelivered])) { busRef =>
+      busRef ! RegisterHandlers[PersonAggregate]
+      expectMsgType[HandlersRegistered](timeout.duration)
+
+      busRef ! CreatePerson("pippo")
+      busRef ! CreatePerson("pluto")
+
+      busRef ! SendPostcard("pluto", "pippo", "bau bau")
+      expectMsg(timeout.duration, PostcardDelivered("pluto", "pippo", "bau bau"))
+    }
+  }
+
+  it should "be able to register saga" in {
+    _tenant = "t5"
     withEventBus { busRef =>
       busRef ! RegisterSaga[PriorityActivitiesSaga]()
       expectMsgPF(timeout.duration) {
@@ -60,7 +83,7 @@ trait EventBusSpec extends AkkaSpec {
   //TODO: test Activate messages
 
   it should "be able to execute saga workflow" in {
-    _tenant = "t5"
+    _tenant = "t6"
     withEventBus(Seq(classOf[WeightChanged])) { busRef =>
 
       busRef ! RegisterHandlers[PriorityAggregate]

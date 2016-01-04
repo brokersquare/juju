@@ -48,13 +48,13 @@ class SagaSpec extends LocalDomainSpec("Saga") {
   }
 
   it should "be able to handle events by apply method" in {
-    val sagaRef = system.actorOf(Props(classOf[AveragePersonWeightSaga], this.testActor), s"fakesaga-5")
+    val sagaRef = system.actorOf(Props(classOf[AveragePersonWeightSaga], "x", this.testActor), s"fakesaga-5")
     sagaRef ! WeightChanged("x", 80)
     expectNoMsg(1 second)
   }
 
   it should "be able to wakeup by wakeup method" in {
-    val sagaRef = system.actorOf(Props(classOf[AveragePersonWeightSaga], this.testActor), s"fakesaga-6")
+    val sagaRef = system.actorOf(Props(classOf[AveragePersonWeightSaga], "x", this.testActor), s"fakesaga-6")
     sagaRef ! WeightChanged("x", 80)
     sagaRef ! PublishWakeUp()
     expectMsg(3000 seconds, PublishAverageWeight(80))

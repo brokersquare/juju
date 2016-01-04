@@ -1,8 +1,11 @@
 package juju.domain
 
-import akka.actor.{ActorLogging, Props}
+import akka.actor.{ActorRef, ActorLogging, Props}
 import akka.persistence.PersistentActor
-import juju.messages.{DomainEvent, Command}
+import juju.messages.{RouteTo, DomainEvent, Command}
+
+import scala.reflect.ClassTag
+import scala.language.existentials
 
 class AggregateRootNotInitializedException extends Exception
 
@@ -86,7 +89,7 @@ abstract class AggregateRoot[S <: AggregateState]
   }
 
   def raise(events: Seq[DomainEvent]) : Unit = {
-    val s = sender
+    val s = sender()
     events match {
       //TODO: make persist and send back events fault tolerant
       case e +: rest =>
@@ -103,7 +106,32 @@ abstract class AggregateRoot[S <: AggregateState]
 
 
   override def receiveCommand: Receive = {
-    case cmd: Command =>handle(cmd)
+    case cmd: Command =>
+      handle(cmd)
+
+    case m: RouteTo =>
+      aggregateSenderClass = Some(m.senderClass.asInstanceOf[Class[AggregateRoot[_]]])
+      aggregateSenderId = Some(m.senderId)
+
+      handleAggregateMessage(m.message)
+
+      aggregateSenderClass = None
+      aggregateSenderId = None
+
     case _ =>
+  }
+
+  private var aggregateSenderClass: Option[Class[AggregateRoot[_]]] = None
+  private var aggregateSenderId: Option[String] = None
+  protected def aggregateSender() = (aggregateSenderClass.get, aggregateSenderId.get)
+
+  protected def handleAggregateMessage : Receive = {
+    case _ => ???
+  }
+
+  protected def deliveryMessageToAggregate[A <: AggregateRoot[_] : ClassTag](aggregateId: String, message: Any, router: ActorRef = sender()): Unit = {
+    val senderClass = this.getClass.asInstanceOf[Class[_ <: AggregateRoot[_]]]
+    val destinationClass = implicitly[ClassTag[A]].runtimeClass.asInstanceOf[Class[_ <: AggregateRoot[_]]]
+    router ! RouteTo(senderClass, self.path.name, destinationClass, aggregateId, message)
   }
 }
