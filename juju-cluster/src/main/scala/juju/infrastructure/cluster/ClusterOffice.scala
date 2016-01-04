@@ -5,19 +5,18 @@ import java.util.concurrent.TimeUnit
 import akka.actor._
 import akka.cluster.pubsub.DistributedPubSub
 import akka.cluster.pubsub.DistributedPubSubMediator.Publish
-import akka.cluster.sharding.{ClusterShardingSettings, ClusterSharding, ShardRegion}
+import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
 import akka.serialization.Serialization
 import akka.util.Timeout
 import juju.domain.AggregateRoot.AggregateIdResolution
 import juju.domain.{AggregateRoot, AggregateRootFactory}
-import juju.infrastructure.{EventBus, UpdateHandlers, OfficeFactory}
-import juju.messages.{Command, DomainEvent}
+import juju.infrastructure.{EventBus, OfficeFactory, UpdateHandlers}
+import juju.messages.{RouteTo, Command, DomainEvent}
 
 import scala.concurrent.Await
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration.{FiniteDuration, _}
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
-import scala.concurrent.duration._
 
 object ClusterOffice {
   implicit def clusterOfficeFactory[A <: AggregateRoot[_] : AggregateIdResolution : AggregateRootFactory : ClassTag](_tenant: String)(implicit system : ActorSystem) = {
@@ -43,12 +42,23 @@ class ClusterOfficeProxy[A <: AggregateRoot[_] : AggregateIdResolution : Aggrega
   val shardRegion = getOrCreate
   val aggregateName = implicitly[ClassTag[A]].runtimeClass.getSimpleName //TODO: take it from an aggregate name service
 
+  var handlers : Map[Class[_ <: Command], ActorRef] = Map.empty
+
   override def receive: Actor.Receive = {
-    case UpdateHandlers(_) =>
+    case UpdateHandlers(h) =>
+      handlers = h
       //log.debug(s"received update handlers => ignore (office cannot route command. Useful only for the saga router)")
       sender ! akka.actor.Status.Success(aggregateName)
 
-    case m => shardRegion ! m
+    case m : RouteTo =>
+      if (m.destinationClass == implicitly[ClassTag[A]].runtimeClass) {
+        shardRegion ! m
+      } else {
+        val actor = handlers.values.filter(_.path.name.endsWith(m.destinationClass.getName)).head
+        actor ! m
+      }
+    case m =>
+      shardRegion ! m
   }
 
   private def getOrCreate: ActorRef = {
@@ -71,21 +81,23 @@ class ClusterOfficeProxy[A <: AggregateRoot[_] : AggregateIdResolution : Aggrega
 
     val idExtractor: ShardRegion.ExtractEntityId = {
       case cmd : Command => (resolution.resolve(cmd), cmd)
+      case m : RouteTo => (m.destinationId, m)
       case _ => ???
     }
 
     val shardResolver: ShardRegion.ExtractShardId = {
       case cmd: Command => Integer.toHexString(resolution.resolve(cmd).hashCode).charAt(0).toString
+      case m: RouteTo => Integer.toHexString(m.destinationId.hashCode).charAt(0).toString
       case _ => ???
     }
 
-    val officeProps = Props(classOf[ClusterOffice], tenant, aggregateProps)
+    val officeProps = Props(classOf[ClusterOffice], tenant, aggregateProps, self)
 
     ClusterSharding(system).start(officeName, officeProps, ClusterShardingSettings(system), idExtractor, shardResolver)
   }
 }
 
-class ClusterOffice(tenant: String, aggregateProps: Props) extends Actor with ActorLogging {
+class ClusterOffice(tenant: String, aggregateProps: Props, proxy: ActorRef) extends Actor with ActorLogging {
   val address = Serialization.serializedActorPath(self)
   var aggregateRef : Option[ActorRef] = None
   val mediator = DistributedPubSub(context.system).mediator
@@ -94,19 +106,34 @@ class ClusterOffice(tenant: String, aggregateProps: Props) extends Actor with Ac
 
   override def receive: Receive = {
     case cmd : Command =>
-      val ref  = aggregateRef match {
-        case Some(r) => r
-        case None =>
-          aggregateRef = Some(context.actorOf(aggregateProps, self.path.name))
-          log.debug(s"[$address]created instance of aggregate ${aggregateRef.get}")
-          aggregateRef.get
-      }
-      ref ! cmd //TODO: do retry in case of timeout???
+      val aref = ref
+      aref ! cmd //TODO: do retry in case of timeout???
       log.debug(s"[$address]route $cmd to aggregate ${aggregateRef.get}")
     case event : DomainEvent =>
       val subscribedEventName = EventBus.nameWithTenant(tenant, event)
       mediator ! Publish(subscribedEventName, event, sendOneMessageToEachGroup = true)
       log.debug(s"[$address]received $event and published to $subscribedEventName")
-    case e => log.debug(s"[$address]detected message $e")
+
+    case m:RouteTo =>
+      val aref = ref
+      if (aref.path.name == m.destinationId) {
+        aref ! m
+      }
+      if (aref.path.name == m.senderId) {
+        proxy ! m
+      }
+
+    case e =>
+      log.debug(s"[$address]detected message $e")
+  }
+
+  private def ref = {
+    aggregateRef match {
+      case Some(r) => r
+      case None =>
+        aggregateRef = Some(context.actorOf(aggregateProps, self.path.name))
+        log.debug(s"[$address]created instance of aggregate ${aggregateRef.get}")
+        aggregateRef.get
+    }
   }
 }
