@@ -29,6 +29,9 @@ object Saga {
 }
 
 trait Saga extends PersistentActor with ActorLogging {
+  private var completed = false
+  protected def isCompleted = completed
+  protected def markAsCompleted() = completed = true
 
   def sagaId = self.path.parent.name + '_' + self.path.name
   log.debug(s"created Saga ${this.getClass.getCanonicalName} with id $sagaId")
@@ -65,10 +68,12 @@ trait Saga extends PersistentActor with ActorLogging {
    * No state transition indicates the current event message could have been received out-of-order.
    */
   def receiveEvent: Receive = {
-    case e: DomainEvent => raise(e)
-    case w: WakeUp if isWakeupSupported(w) =>
+    case e: DomainEvent if !completed => raise(e)
+    case e: DomainEvent  =>
+    case w: WakeUp if isWakeupSupported(w) && !completed =>
       val wakeup = wakeups.filter(_.getParameterTypes.head == w.getClass).head
       wakeup.invoke(this, w)
+    case w: WakeUp if isWakeupSupported(w) =>
   }
 
 
