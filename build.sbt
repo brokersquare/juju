@@ -11,11 +11,11 @@ lazy val defaultSettings =
         )
       )
 
-lazy val juju = (project in file("."))
+lazy val core = Project(id="juju-core", base=file("core"))
   .settings(defaultSettings: _*)
-  .settings(libraryDependencies ++= Dependencies.juju)
+  .settings(libraryDependencies ++= Dependencies.core)
 
-lazy val jujuCluster = (project in file("juju-cluster"))
+lazy val jujuCluster = Project(id="juju-cluster",base=file("juju-cluster"))
   .settings(defaultSettings: _*)
   .settings(libraryDependencies ++= Dependencies.jujuCluster)
-  .dependsOn(juju % "compile->compile;test->test")
+  .dependsOn(core % "compile->compile;test->test")
