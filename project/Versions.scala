@@ -9,4 +9,6 @@ object Versions {
   val KafkaPlugin = "0.4"
   val AkkaKafkaPersistence = "2.3-14"
   val LogBack = "1.1.3"
+  val Spray   = "1.3.3"
+  val ScalaReflect  = "2.11.7"
 }
