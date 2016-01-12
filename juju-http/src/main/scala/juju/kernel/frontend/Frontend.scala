@@ -44,7 +44,6 @@ object Frontend {
     classSymbol.companion.typeSignature.members
   }
 
-
   private def getCaseClassParameters[T : ClassTag] :Seq[(ru.Name, ru.Type)]  =
     companionMembers(scala.reflect.classTag[T])
       .filter { m => m.isMethod && m.name.toString == "apply"}
@@ -54,7 +53,7 @@ object Frontend {
 
 trait Frontend extends Actor with ActorLogging with FrontendService {
   def actorRefFactory = context
-
+  implicit def unmarshallerCommand[T <: Command : ClassTag] = Frontend.unmarshallerCommand
   def receive = runRoute(apiRoute)
 }
 
