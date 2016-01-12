@@ -17,6 +17,6 @@ object Dependencies {
     val akkaTestkit = "com.typesafe.akka" %% "akka-testkit" % Akka % "test"
   }
   import Compile._
-  val juju = Seq(akkaActor, akkaSlf4j, akkaPersistence, scalaLogging, reactivex, akkaTestkit, scalaTest)
+  val core = Seq(akkaActor, akkaSlf4j, akkaPersistence, scalaLogging, reactivex, akkaTestkit, scalaTest)
   val jujuCluster = Seq(akkaRemote, akkaCluster, akkaClusterSharding, akkaClusteTools, akkaContrib)
 }
