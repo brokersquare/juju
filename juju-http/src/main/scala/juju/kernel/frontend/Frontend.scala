@@ -11,7 +11,7 @@ import scala.reflect.runtime.{universe => ru}
 
 
 object Frontend {
-  implicit def unmarshallerCommand[T <: Command : ClassTag] = Unmarshaller[T](MediaTypes.`application/x-www-form-urlencoded`) {
+  implicit def formUnmarshallerCommand[T <: Command : ClassTag] = Unmarshaller[T](MediaTypes.`application/x-www-form-urlencoded`) {
     case e: HttpEntity.NonEmpty => {
       val u = spray.httpx.unmarshalling.FormDataUnmarshallers.UrlEncodedFormDataUnmarshaller(e)
       u match {
@@ -53,18 +53,18 @@ object Frontend {
 
 trait Frontend extends Actor with ActorLogging with FrontendService {
   def actorRefFactory = context
-  implicit def unmarshallerCommand[T <: Command : ClassTag] = Frontend.unmarshallerCommand
+  implicit def unmarshallerCommand[T <: Command : ClassTag] = Frontend.formUnmarshallerCommand
   def receive = runRoute(apiRoute)
 }
 
 trait FrontendService extends HttpService {
   val apiRoute: Route
-  val busGateway : ActorRef
+  val commandGateway : ActorRef
 
   protected def handleCommand[C <: Command : ClassTag : FromRequestUnmarshaller] = {
     entity(as[C]) { command =>
       complete {
-        busGateway ! command
+        commandGateway ! command
         s"received command $command \n"
       }
     }
