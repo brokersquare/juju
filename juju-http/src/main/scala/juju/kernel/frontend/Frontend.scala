@@ -3,7 +3,7 @@ package juju.kernel.frontend
 import akka.actor.{Actor, ActorLogging, ActorRef}
 import juju.messages.Command
 import spray.http.{HttpEntity, MediaTypes}
-import spray.httpx.unmarshalling.{FromRequestUnmarshaller, Unmarshaller}
+import spray.httpx.unmarshalling.Unmarshaller
 import spray.routing.{HttpService, Route}
 
 import scala.reflect.ClassTag
@@ -61,11 +61,18 @@ trait FrontendService extends HttpService {
   val apiRoute: Route
   val commandGateway : ActorRef
 
-  protected def handleCommand[C <: Command : ClassTag : FromRequestUnmarshaller] = {
+  protected def commandGatewayRoute[C <: Command : ClassTag : Unmarshaller] = {
+    import akka.pattern.ask
+
+    import scala.concurrent.duration._
+    implicit val timeout: akka.util.Timeout = 5 seconds
+    implicit def ec = actorRefFactory.dispatcher
+
     entity(as[C]) { command =>
       complete {
-        commandGateway ! command
-        s"received command $command \n"
+        //commandGateway ! command
+        //s"received command $command \n"
+        (commandGateway ? command).asInstanceOf[String]
       }
     }
   }

@@ -10,5 +10,6 @@ object Versions {
   val AkkaKafkaPersistence = "2.3-14"
   val LogBack = "1.1.3"
   val Spray   = "1.3.3"
+  val SprayJson   = "1.3.2"
   val ScalaReflect  = "2.11.7"
 }
