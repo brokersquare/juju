@@ -1,11 +1,15 @@
 package juju.kernel.frontend
 
-import akka.actor.ActorRef
+import akka.actor.Status.Success
+import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import juju.messages.Command
 import org.scalatest.{FlatSpec, Matchers}
-import spray.http.{HttpEntity, MediaTypes}
+import rx.lang.scala.{Observable, Observer, Subscription}
+import spray.http.{StatusCodes, HttpEntity, MediaTypes}
 import spray.routing.{HttpService, Route}
 import spray.testkit.ScalatestRouteTest
+import scala.concurrent.duration._
+
 //import spray.httpx.SprayJsonSupport._
 //import spray.json.DefaultJsonProtocol._
 import scala.reflect.ClassTag
@@ -14,7 +18,30 @@ object FrontendServiceSpec {
   case class FakeSimpleCommand(field1: String, field2: String) extends Command
   case class FakeSimpleWithIntParameterCommand(field1: String, field2: Int) extends Command
 
-  var messages : List[Any] = List.empty
+
+  private var archive = Seq.empty[Object]
+  private var observers = Seq.empty[Observer[Object]]
+  private val messages : Observable[Object] = {
+    Observable.create[Object](observer => {
+      observers = observers :+ observer
+      Subscription {
+        observer.onCompleted()
+        observers = observers.filterNot (_ == observer)
+      }
+    })
+  }
+
+  def waitNextMessage(timeout : Duration) : Object = {
+    messages.first.timeout(timeout).toBlocking.first
+  }
+
+  def notifyMessage(message : Object) = {
+    archive = archive :+ message
+    //println(s"message $message archived. Total archived ${archive.length}")
+    observers foreach {
+      o => o.onNext(message)
+    }
+  }
 }
 
 class FrontendServiceSpec extends FlatSpec with Matchers with ScalatestRouteTest with HttpService with FrontendService {
@@ -31,23 +58,28 @@ class FrontendServiceSpec extends FlatSpec with Matchers with ScalatestRouteTest
   }
 
 
-  override val commandGateway: ActorRef = ActorRef.noSender/*system.actorOf(Props(new Actor with ActorLogging {
+  override val commandGateway: ActorRef = system.actorOf(Props(new Actor with ActorLogging {
     override def receive: Receive = {
-      case m: Any => FrontendServiceSpec.messages = FrontendServiceSpec.messages.::(m)
+      case m: Object =>
+        sender() ! Success()
+        notifyMessage(m)
     }
-  }))*/
+  }))
 
   it should "builds and routes the command when the POST has been called" in {
 
     val data = HttpEntity(MediaTypes.`application/x-www-form-urlencoded`, """field1=pippo&field2=pluto""")
     Post("/api/fake", data) ~> apiRoute ~> check {
-      val h = handled
+      //println(s"checking messages... archive length is ${archive.length} ")
+      val m = if (archive.isEmpty) waitNextMessage(10 seconds) else archive.last
       val res = responseAs[String]
-      val s = status
-      val e = entity
 
-      status shouldBe ???
-      entity shouldBe ???
+      handled shouldBe true
+      status shouldBe a [StatusCodes.Success]
+      m shouldBe a [FakeSimpleCommand]
+      val cmd = m.asInstanceOf[FakeSimpleCommand]
+      cmd.field1 shouldEqual "pippo"
+      cmd.field2 shouldEqual "pluto"
     }
   }
 

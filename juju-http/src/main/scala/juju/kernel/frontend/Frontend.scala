@@ -70,9 +70,9 @@ trait FrontendService extends HttpService {
 
     entity(as[C]) { command =>
       complete {
-        //commandGateway ! command
-        //s"received command $command \n"
-        (commandGateway ? command).asInstanceOf[String]
+        (commandGateway ? command).map { _ =>
+          s"command '$command' sent"
+        }
       }
     }
   }
