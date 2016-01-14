@@ -4,14 +4,15 @@ import akka.actor.{Actor, ActorLogging, ActorRef}
 import juju.messages.Command
 import spray.http.{HttpEntity, MediaTypes}
 import spray.httpx.unmarshalling.Unmarshaller
+import spray.json._
 import spray.routing.{HttpService, Route}
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.{universe => ru}
 
+object Frontend extends DefaultJsonProtocol {
 
-object Frontend {
-  implicit def formUnmarshallerCommand[T <: Command : ClassTag] = Unmarshaller[T](MediaTypes.`application/x-www-form-urlencoded`) {
+  def formUnmarshallerCommand[T <: Command : ClassTag] = Unmarshaller[T](MediaTypes.`application/x-www-form-urlencoded`) {
     case e: HttpEntity.NonEmpty => {
       val u = spray.httpx.unmarshalling.FormDataUnmarshallers.UrlEncodedFormDataUnmarshaller(e)
       u match {
@@ -51,17 +52,17 @@ object Frontend {
 
 }
 
-trait Frontend extends Actor with ActorLogging with FrontendService {
+trait Frontend extends Actor with ActorLogging with FrontendService with PingService {
   def actorRefFactory = context
   implicit def unmarshallerCommand[T <: Command : ClassTag] = Frontend.formUnmarshallerCommand
-  def receive = runRoute(apiRoute)
+  def receive = runRoute(apiRoute ~ pingRoute)
 }
 
 trait FrontendService extends HttpService {
   val apiRoute: Route
   val commandGateway : ActorRef
 
-  protected def commandGatewayRoute[C <: Command : ClassTag : Unmarshaller] = {
+  protected def commandGatewayRoute[C <: Command : Unmarshaller] = {
     import akka.pattern.ask
 
     import scala.concurrent.duration._
@@ -77,3 +78,44 @@ trait FrontendService extends HttpService {
     }
   }
 }
+
+trait PingService extends HttpService {
+  def pingRoute = path("ping") {
+    get {complete("pong!")}
+  }
+
+  def pongRoute = path("pong") {
+    get {complete("pong?!?!")}
+  }
+
+
+  def rootRoute = pingRoute ~ pongRoute
+}
+
+
+//http://stackoverflow.com/questions/25178108/converting-datetime-to-a-json-string
+/*
+You have several problems here.
+
+First, the toString() method in AbstractDateTime requires one or several arguments see here.
+
+But I would advise you against this path and recommend using properly Spray-Json.
+
+Spray-json does not know how to serialize Option[DateTime], therefore you have to provide a RootJsonFormat for it.
+
+This is what I am doing.
+*//*
+implicit object DateJsonFormat extends RootJsonFormat[DateTime] {
+
+  private val parserISO : DateTimeFormatter = ISODateTimeFormat.dateTimeNoMillis()
+
+  override def write(obj: DateTime) = JsString(parserISO.print(obj))
+
+  override def read(json: JsValue) : DateTime = json match {
+    case JsString(s) => parserISO.parseDateTime(s)
+    case _ => throw new DeserializationException("Error info you want here ...")
+  }
+}*/
+//Adapt it as you want if you do not want to use ISO formatting.
+//FTR: There is also a spray.http.DateTime class that is more efficient that the alternatives and works great
+//if you don't need timezone support or millisecond precision.
