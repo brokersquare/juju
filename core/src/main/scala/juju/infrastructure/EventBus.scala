@@ -15,6 +15,7 @@ import scala.language.existentials
 
 object EventBus {
   def props(tenant: String = "") = Props(classOf[EventBus], tenant)
+  def actorName(tenant: String = "") = nameWithTenant(tenant, "Bus")
 
   def nameWithTenant(tenant: String, name: String): String = {
     tenant match {
@@ -55,8 +56,11 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
       val commandType = command.getClass
 
       handlers.get(commandType) match {
-        case Some(office) => office ! command
-        case None => sender ! akka.actor.Status.Failure(HandlerNotDefinedException)
+        case Some(office) =>
+          office ! command
+          sender ! akka.actor.Status.Success(command)
+        case None =>
+          sender ! akka.actor.Status.Failure(HandlerNotDefinedException)
       }
 
     case activate : Activate =>

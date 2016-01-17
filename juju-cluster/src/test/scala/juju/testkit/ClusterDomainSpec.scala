@@ -45,12 +45,10 @@ object ClusterDomainSpec {
   }
 }
 
-abstract class ClusterDomainSpec (test: String, _config: Config = ClusterDomainSpec.clusterConfig)
+abstract class ClusterDomainSpec (test: String, _config: Config = ClusterDomainSpec.clusterConfig, ports:Seq[String] = Seq("0"))
   extends {
     val seedPort: Int = ClusterDomainSpec.getAvailablePort
-    val ports = Seq("0", "0")
-
-    val servers = (Seq(seedPort.toString) ++ ports).toSet[String] map { port => ClusterDomainSpec.createSystem(seedPort.toString, port, _config) }
+    val servers = (Seq(seedPort.toString) ++ ports) map { port => ClusterDomainSpec.createSystem(seedPort.toString, port, _config) }
     override implicit val system : ActorSystem = servers.head
 
     override val config : Config = system.settings.config

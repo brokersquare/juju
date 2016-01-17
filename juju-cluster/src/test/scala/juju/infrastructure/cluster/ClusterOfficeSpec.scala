@@ -28,7 +28,7 @@ class ClusterOfficeSpec extends ClusterDomainSpec("ClusterOffice") with OfficeSp
   override protected def createOffice[A <: AggregateRoot[_] : AggregateIdResolution : AggregateRootFactory : ClassTag](tenant: String): ActorRef = {
     offices = servers.map { s =>
       ClusterDomainSpec.createOffice[A](tenant)(s)
-    }
+    }.toSet
     ClusterDomainSpec.createOffice[A](tenant)(system)
   }
 }

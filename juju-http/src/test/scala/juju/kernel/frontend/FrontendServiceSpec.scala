@@ -1,6 +1,5 @@
 package juju.kernel.frontend
 
-import akka.actor.Status.Success
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import juju.kernel.frontend.FrontendServiceSpec.{FakeSimpleCommand, FakeSimpleWithNumberParameterCommand}
 import juju.messages.Command
@@ -67,7 +66,7 @@ class FrontendServiceSpec extends FlatSpec with Matchers with ScalatestRouteTest
   override val commandGateway: ActorRef = system.actorOf(Props(new Actor with ActorLogging {
     override def receive: Receive = {
       case m: Object =>
-        sender() ! Success()
+        sender() ! akka.actor.Status.Success(m)
         notifyMessage(m)
     }
   }))

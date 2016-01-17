@@ -69,7 +69,7 @@ trait AkkaSpec extends TestKitBase
 
     try {
       router = system.actorOf(DeadLetterRouter.props(this.testActor), EventBus.nameWithTenant(tenant, "DeadLetterRouter"))
-      busRef = system.actorOf(EventBus.props(tenant), EventBus.nameWithTenant(tenant, "EventBus"))
+      busRef = system.actorOf(EventBus.props(tenant), EventBus.actorName(tenant))
       action(busRef)
     } finally {
       subscribedEvents.foreach { ec =>
