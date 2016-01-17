@@ -1,6 +1,7 @@
 package juju.kernel.frontend
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Props}
+import akka.actor._
+import juju.infrastructure.CommandProxyFactory
 import juju.kernel.frontend.FrontendServiceSpec.{FakeSimpleCommand, FakeSimpleWithNumberParameterCommand}
 import juju.messages.Command
 import org.scalatest.{FlatSpec, Matchers}
@@ -11,7 +12,6 @@ import spray.routing.Route
 import spray.testkit.ScalatestRouteTest
 
 import scala.concurrent.duration._
-
 
 object FrontendServiceSpec {
   case class FakeSimpleCommand(field1: String, field2: String) extends Command
@@ -63,13 +63,15 @@ class FrontendServiceSpec extends FlatSpec with Matchers with ScalatestRouteTest
     }  ~ pingRoute
   }
 
+  override val commandProxyFactory : CommandProxyFactory = new FakeCommandProxyFactory(system)
+  /*
   override val commandGateway: ActorRef = system.actorOf(Props(new Actor with ActorLogging {
     override def receive: Receive = {
       case m: Object =>
         sender() ! akka.actor.Status.Success(m)
         notifyMessage(m)
     }
-  }))
+  }))*/
 
   it should "be ping" in {
     Get("/api/ping") ~> apiRoute ~> check {
@@ -168,4 +170,14 @@ class FrontendServiceSpec extends FlatSpec with Matchers with ScalatestRouteTest
       assert(false, "not yet implemented")
     }
   */
+}
+
+class FakeCommandProxyFactory(system : ActorSystem) extends CommandProxyFactory {
+  override def actor: ActorRef = system.actorOf(Props(new Actor with ActorLogging {
+    override def receive: Receive = {
+      case m: Object =>
+        sender() ! akka.actor.Status.Success(m)
+        FrontendServiceSpec.notifyMessage(m)
+    }
+  }))
 }

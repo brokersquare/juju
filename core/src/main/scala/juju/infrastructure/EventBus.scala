@@ -16,6 +16,7 @@ import scala.language.existentials
 object EventBus {
   def props(tenant: String = "") = Props(classOf[EventBus], tenant)
   def actorName(tenant: String = "") = nameWithTenant(tenant, "Bus")
+  def proxyActorName(tenant: String = "") = nameWithTenant(tenant, "BusProxy")
 
   def nameWithTenant(tenant: String, name: String): String = {
     tenant match {

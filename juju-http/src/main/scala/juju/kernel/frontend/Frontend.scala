@@ -1,6 +1,7 @@
 package juju.kernel.frontend
 
-import akka.actor.{Actor, ActorLogging, ActorRef}
+import akka.actor.{Actor, ActorLogging}
+import juju.infrastructure.CommandProxyFactory
 import juju.messages.Command
 import spray.http.{HttpEntity, MediaTypes}
 import spray.httpx.unmarshalling.Unmarshaller
@@ -60,7 +61,9 @@ trait Frontend extends Actor with ActorLogging with FrontendService with PingSer
 
 trait FrontendService extends HttpService {
   val apiRoute: Route
-  val commandGateway : ActorRef
+
+  val commandProxyFactory : CommandProxyFactory
+  val commandGateway = commandProxyFactory.actor
 
   protected def commandGatewayRoute[C <: Command : Unmarshaller] = {
     import akka.pattern.ask

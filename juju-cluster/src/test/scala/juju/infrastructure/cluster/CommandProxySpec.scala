@@ -1,17 +1,15 @@
 package juju.infrastructure.cluster
 
 import akka.actor._
+import akka.cluster.Cluster
 import akka.cluster.ClusterEvent.{InitialStateAsEvents, MemberUp}
 import akka.cluster.pubsub.DistributedPubSub
 import akka.cluster.pubsub.DistributedPubSubMediator.{Subscribe, SubscribeAck, Unsubscribe, UnsubscribeAck}
-import akka.cluster.routing.{ClusterRouterGroup, ClusterRouterGroupSettings}
-import akka.cluster.{Cluster, MemberStatus}
-import akka.routing.ConsistentHashingRouter.ConsistentHashableEnvelope
-import akka.routing.{ConsistentHashingGroup, RoundRobinGroup}
-import juju.infrastructure.EventBus
-import juju.sample.PriorityAggregate.{CreatePriority, PriorityCreated}
+import juju.infrastructure.{EventBus, HandlersRegistered, RegisterHandlers}
+import juju.sample.PriorityAggregate
+import juju.sample.PriorityAggregate.CreatePriority
 import juju.testkit.{AkkaSpec, ClusterDomainSpec}
-
+//import scala.concurrent.duration._
 
 class CommandProxySpec extends ClusterDomainSpec("CommandProxy", ClusterDomainSpec.clusterConfig, Seq("0", "0")) with AkkaSpec {
   var _tenant = ""
@@ -43,132 +41,35 @@ class CommandProxySpec extends ClusterDomainSpec("CommandProxy", ClusterDomainSp
 
   }
 
-  it should "be able to route messages" in {
-    _tenant = "t1"
-    val clientSystem = servers.last
-    println(s"client system address ${address(clientSystem)}")
-
-    waitUntilAllClusterMembersAreUp()
-
-    var routee1 = system.actorOf(Props(new ClusterRoutee(testActor)), "bus")
-
-    val routeesPaths = s"/user/bus*" :: Nil
-    val busproxyConf = ClusterRouterGroup(
-      ConsistentHashingGroup(routeesPaths),
-      ClusterRouterGroupSettings(
-        totalInstances = 100,
-        routeesPaths = routeesPaths,
-        allowLocalRoutees = false,
-        useRole = None
-      )
-    )
-
-    val busproxy = clientSystem.actorOf(busproxyConf.props(), "busproxy")
-
-    val word = "xyz"
-    var state = Cluster(clientSystem).state
-    busproxy ! ConsistentHashableEnvelope(CreatePriority(word), word)
-
-    val result = fishForMessage(timeout.duration) {
-      case m : PriorityCreated =>
-        println(s"received $m")
-        true
-      case m =>
-        println(s"discarded message $m")
-        false
-    }
-
-    result shouldBe PriorityCreated(word)
-  }
-
-  def waitUntilAllClusterMembersAreUp() = {
-    val cluster = Cluster(system)
-    cluster.subscribe(testActor, initialStateMode = InitialStateAsEvents, classOf[MemberUp])
-    receiveWhile(timeout.duration) {
-      case MemberUp(member) if !cluster.state.members.forall(_.status == MemberStatus.Up) =>
-        println(s"-MemberUp- $member")
-        println(s"${cluster.state.members}")
-    }
-    cluster.unsubscribe(testActor)
-
-    val state = cluster.state
-    state.members.forall(_.status == MemberStatus.Up) shouldBe true
-    ignoreMsg {
-      case _ : MemberUp =>
-        true
-      case _  =>
-        false
-    }
-    state
-  }
-
-  def address(asystem: ActorSystem) = {
-    Cluster(asystem).selfAddress
-  }
-
-  case class ClusterReply(any: Any)
-  class ClusterRoutee(tester: ActorRef) extends Actor with ActorLogging {
-    def receive = {
-      case CreatePriority(name) =>
-        tester ! PriorityCreated(name)
-      case m =>
-        println(s"message $m received by ${context.self.path}")
-        tester ! ClusterReply(m)
-    }
-  }
-
-/*
   it should "be able to route commands to the remote bus" in {
     _tenant = "t1"
     val clientSystem = servers.last
 
     withEventBus { bus =>
-      /*bus ! RegisterHandlers[PriorityAggregate]
+      bus ! RegisterHandlers[PriorityAggregate]
       expectMsgPF(timeout.duration) {
         case HandlersRegistered(handlers) =>
-      }*/
+      }
+      val cluster = Cluster(system)
+      cluster.subscribe(testActor, initialStateMode = InitialStateAsEvents, classOf[MemberUp])
 
-      Cluster(system).subscribe(testActor, classOf[MemberUp])
-      expectMsgClass(classOf[CurrentClusterState])
-      //expectMsgClass(classOf[MemberUp])
-      Cluster(system).unsubscribe(testActor, classOf[MemberUp])
+      val busproxy = new ClusterCommandProxyFactory(tenant, allowLocalBus = true)(system).actor
 
-      //val busproxy = new ClusterCommandProxyFactory(tenant)(clientSystem).actor
+      import scala.concurrent.ExecutionContext.Implicits.global
+      import scala.concurrent.duration._
+      clientSystem.scheduler.schedule(0 seconds, 1 seconds, busproxy, CreatePriority("xyz"))
 
-      val routeesPaths = s"/user/${EventBus.actorName(tenant)}*" :: Nil
-
-      val busproxyConf = ClusterRouterGroup(
-        ConsistentHashingGroup(Nil),
-        ClusterRouterGroupSettings(
-          totalInstances = 100,
-          routeesPaths = routeesPaths,
-          allowLocalRoutees = false,
-          useRole = None
-        )
-      )
-      val busproxy = clientSystem.actorOf(busproxyConf.props(), "busproxy")
-      //val busproxy = clientSystem.actorOf(new RoundRobinGroup(routeePaths).props(), "busproxy")
-
-      //busproxy ! ConsistentHashableEnvelope(CreatePriority("xyz"), "abc")
-      busproxy ! ConsistentHashableEnvelope("xyz", "abc")
-      expectMsg(timeout.duration, PriorityCreated("xyz"))
-      /*
-      expectMsgPF(timeout.duration) {
-        case e@HandlersRegistered(_) => println(s"message  HandlersRegistered retrieved $e")
-      }*/
+      val result = fishForMessage(timeout.duration) {
+        case akka.actor.Status.Success(CreatePriority("xyz")) =>
+          true
+        case m: MemberUp =>
+          val states = cluster.state.members map (_.status)
+          println(s"cluster state before send messages: $states")
+          false
+        case m =>
+          false
+      }
+      result shouldBe akka.actor.Status.Success(CreatePriority("xyz"))
     }
-  }*/
-}
-
-
-trait CommandProxyFactory {
-  def actor : ActorRef
-}
-
-class ClusterCommandProxyFactory(tenant : String = "")(implicit system: ActorSystem) extends CommandProxyFactory {
-  override def actor: ActorRef = {
-    val routeePaths = List(s"/user/${EventBus.actorName(tenant)}*")
-    val proxyName = EventBus.nameWithTenant(tenant,"busproxy")
-    system.actorOf(new RoundRobinGroup(routeePaths).props(), "busproxy")
   }
 }
