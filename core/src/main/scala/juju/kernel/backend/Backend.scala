@@ -25,7 +25,7 @@ trait Backend extends Actor with ActorLogging with Stash with Node {
   def config = system.settings.config
   implicit lazy val timeout: akka.util.Timeout = config getDuration("juju.timeout",TimeUnit.SECONDS) seconds
 
-  def bus = context.actorOf(EventBus.props(), "bus")
+  lazy val bus = context.actorOf(EventBus.props(), "bus")
 
   private var aggregates : Set[RegisterHandlers[_]] = Set.empty
   protected def registerAggregate[A <: AggregateRoot[_] : OfficeFactory : AggregateHandlersResolution]() = {
