@@ -1,5 +1,6 @@
 lazy val defaultSettings =
     Defaults.coreDefaultSettings ++
+      Reset.tasks ++
       Seq(
         organization := "com.brokersquare",
         version := Versions.Juju,
