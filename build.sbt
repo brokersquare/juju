@@ -8,7 +8,6 @@ lazy val defaultSettings =
         scalacOptions:= Seq("-language:postfixOps", "-feature", "-deprecation", "-language:implicitConversions"),
         resolvers ++= Seq(
           "spray repo" at "http://repo.spray.io",
-          "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
           "jdgoldie at bintray" at "http://dl.bintray.com/jdgoldie/maven"
         )
       )

@@ -17,7 +17,7 @@ trait Bootable {
    */
   def shutdown(): Unit
 
-  private lazy val quiet = getBoolean("akka.kernel.quiet")
+  private def quiet = getBoolean("akka.kernel.quiet")
   protected def log(s: String) = if (!quiet) println(s)
 
   def main(args: Array[String]) = {

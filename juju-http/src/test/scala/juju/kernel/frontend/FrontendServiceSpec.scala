@@ -63,15 +63,7 @@ class FrontendServiceSpec extends FlatSpec with Matchers with ScalatestRouteTest
     }  ~ pingRoute
   }
 
-  override val commandProxyFactory : CommandProxyFactory = new FakeCommandProxyFactory(system)
-  /*
-  override val commandGateway: ActorRef = system.actorOf(Props(new Actor with ActorLogging {
-    override def receive: Receive = {
-      case m: Object =>
-        sender() ! akka.actor.Status.Success(m)
-        notifyMessage(m)
-    }
-  }))*/
+  override def commandProxyFactory: CommandProxyFactory = new FakeCommandProxyFactory(system)
 
   it should "be ping" in {
     Get("/api/ping") ~> apiRoute ~> check {

@@ -62,8 +62,8 @@ trait Frontend extends Actor with ActorLogging with FrontendService with PingSer
 trait FrontendService extends HttpService {
   val apiRoute: Route
 
-  val commandProxyFactory : CommandProxyFactory
-  val commandGateway = commandProxyFactory.actor
+  def commandProxyFactory : CommandProxyFactory
+  private def commandGateway() = commandProxyFactory.actor
 
   protected def commandGatewayRoute[C <: Command : Unmarshaller] = {
     import akka.pattern.ask
@@ -74,7 +74,7 @@ trait FrontendService extends HttpService {
 
     entity(as[C]) { command =>
       complete {
-        (commandGateway ? command).map { _ =>
+        (commandGateway() ? command).map { _ =>
           s"command '$command' sent"
         }
       }

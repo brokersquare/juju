@@ -64,7 +64,6 @@ class CommandProxySpec extends ClusterDomainSpec("CommandProxy", ClusterDomainSp
           true
         case m: MemberUp =>
           val states = cluster.state.members map (_.status)
-          println(s"cluster state before send messages: $states")
           false
         case m =>
           false
