@@ -25,6 +25,12 @@ object Dependencies {
     val akkaClusterSharding = "com.typesafe.akka" %% "akka-cluster-sharding" % Akka
     val akkaClusteTools = "com.typesafe.akka" %% "akka-cluster-tools" % Akka
     val akkaContrib = "com.typesafe.akka" %% "akka-contrib" % Akka
+
+    val akkaStream = "com.typesafe.akka" %% "akka-stream-experimental" % "2.0.2"
+    val akkaHttpCore = "com.typesafe.akka" %% "akka-http-core-experimental" % "2.0.2"
+    val akkaHttp = "com.typesafe.akka" %% "akka-http-experimental" % "2.0.2"
+    val akkaHttpJson = "com.typesafe.akka" %% "akka-http-spray-json-experimental" % "2.0.2"
+
     val scalaReflect = "org.scala-lang" % "scala-reflect" % Scala intransitive()
     val sprayCan = "io.spray" %% "spray-can" % Spray intransitive()
     val sprayRouting = "io.spray" %% "spray-routing" % Spray
@@ -37,5 +43,5 @@ object Dependencies {
   import Compile._
   val core = Seq(scalaReflect, akkaActor, slf4jSimple, akkaPersistence, scalaLogging, reactivex, akkaTestkit, scalaTest)
   val jujuCluster = Seq(akkaRemote, akkaCluster, akkaClusterSharding, akkaClusteTools, akkaContrib)
-  val jujuHttp = Seq(sprayCan, sprayRouting, sprayClient, sprayJson, reactivex, sprayTest)
+  val jujuHttp = Seq(/*akkaStream, akkaHttp, akkaHttpCore, akkaHttpJson,*/ sprayCan, sprayRouting, sprayClient, sprayJson, reactivex, sprayTest)
 }

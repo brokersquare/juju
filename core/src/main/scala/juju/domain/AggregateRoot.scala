@@ -134,4 +134,10 @@ abstract class AggregateRoot[S <: AggregateState]
     val destinationClass = implicitly[ClassTag[A]].runtimeClass.asInstanceOf[Class[_ <: AggregateRoot[_]]]
     router ! RouteTo(senderClass, self.path.name, destinationClass, aggregateId, message)
   }
+
+  var stopped = false
+  override def postStop() = {
+    super.postStop()
+    stopped = true
+  }
 }

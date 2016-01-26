@@ -93,7 +93,8 @@ trait App extends juju.kernel.Bootable {
     Future {
       Try {
         val (factory : ModulePropsFactory[_], config: Config, afterAppCreation) = roleApps get role get
-        val system = ActorSystem(s"${appname}_$role", config)
+        val systemName = Try(config.getString("akka.cluster.name")).getOrElse(s"${appname}_$role")
+        val system = ActorSystem(systemName, config)
         val props = factory.props(appname, role)
         val app = system.actorOf(props)
         afterAppCreation(system, app)

@@ -105,4 +105,10 @@ trait Saga extends PersistentActor with ActorLogging {
     case m@_ =>
       log.warning(s"unexpected message...: '$m'")
   }
+
+  var stopped = false
+  override def postStop() = {
+    super.postStop()
+    stopped = true
+  }
 }
