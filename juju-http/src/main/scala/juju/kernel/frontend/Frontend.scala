@@ -1,21 +1,24 @@
 package juju.kernel.frontend
 
+import akka.http.scaladsl.server.Directives._
+
+
+
+
+
+/*
 import akka.actor.{Actor, ActorLogging}
-import juju.infrastructure.CommandProxyFactory
 import juju.messages.Command
-import spray.http.{HttpEntity, MediaTypes}
-import spray.httpx.unmarshalling.Unmarshaller
 import spray.json._
-import spray.routing.{HttpService, Route}
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.{universe => ru}
 
 object Frontend extends DefaultJsonProtocol {
-
+/*
   def formUnmarshallerCommand[T <: Command : ClassTag] = Unmarshaller[T](MediaTypes.`application/x-www-form-urlencoded`) {
     case e: HttpEntity.NonEmpty => {
-      val u = spray.httpx.unmarshalling.FormDataUnmarshallers.UrlEncodedFormDataUnmarshaller(e)
+      val u = akka.http.FormDataUnmarshallers.UrlEncodedFormDataUnmarshaller(e)
       u match {
         case Right(data) => {
           val commandType = implicitly[ClassTag[T]].runtimeClass
@@ -50,16 +53,22 @@ object Frontend extends DefaultJsonProtocol {
     companionMembers(scala.reflect.classTag[T])
       .filter { m => m.isMethod && m.name.toString == "apply"}
       .head.asMethod.paramLists.head.map(p => (p.name.decodedName, p.info)).toSeq
-
+*/
 }
 
-trait Frontend extends Actor with ActorLogging with FrontendService with PingService {
+trait CommandUnmarshaller {
+  def unmarshallerCommand[T <: Command : ClassTag]() : Unit
+}
+
+trait Frontend extends Actor with ActorLogging /*with FrontendService*/ with PingService {
   def actorRefFactory = context
-  implicit def unmarshallerCommand[T <: Command : ClassTag] = Frontend.formUnmarshallerCommand
-  def receive = runRoute(apiRoute ~ pingRoute)
+  //implicit def unmarshallerCommand[T <: Command : ClassTag] = Frontend.formUnmarshallerCommand
+  // def receive = runRoute(apiRoute ~ pingRoute)
 }
+/*
+trait FrontendService {
+  self: CommandUnmarshaller =>
 
-trait FrontendService extends HttpService {
   val apiRoute: Route
 
   def commandProxyFactory : CommandProxyFactory
@@ -70,7 +79,8 @@ trait FrontendService extends HttpService {
 
     import scala.concurrent.duration._
     implicit val timeout: akka.util.Timeout = 5 seconds
-    implicit def ec = actorRefFactory.dispatcher
+    implicit def unmarshaller() = self.unmarshallerCommand()
+    //implicit def ec = actorRefFactory.dispatcher
 
     entity(as[C]) { command =>
       complete {
@@ -81,8 +91,12 @@ trait FrontendService extends HttpService {
     }
   }
 }
+*/
+*/
 
-trait PingService extends HttpService {
+trait Frontend {}
+
+trait PingService {
   def pingRoute = path("ping") {
     get {complete("pong!")}
   }
@@ -90,7 +104,6 @@ trait PingService extends HttpService {
   def pongRoute = path("pong") {
     get {complete("pong?!?!")}
   }
-
 
   def rootRoute = pingRoute ~ pongRoute
 }

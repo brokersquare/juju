@@ -30,6 +30,7 @@ object Dependencies {
     val akkaHttpCore = "com.typesafe.akka" %% "akka-http-core-experimental" % "2.0.2"
     val akkaHttp = "com.typesafe.akka" %% "akka-http-experimental" % "2.0.2"
     val akkaHttpJson = "com.typesafe.akka" %% "akka-http-spray-json-experimental" % "2.0.2"
+    val akkaHttpTestKit = "com.typesafe.akka" %% "akka-http-testkit-experimental" % "2.0.2"
 
     val scalaReflect = "org.scala-lang" % "scala-reflect" % Scala intransitive()
     val sprayCan = "io.spray" %% "spray-can" % Spray intransitive()
@@ -43,5 +44,5 @@ object Dependencies {
   import Compile._
   val core = Seq(scalaReflect, akkaActor, slf4jSimple, akkaPersistence, scalaLogging, reactivex, akkaTestkit, scalaTest)
   val jujuCluster = Seq(akkaRemote, akkaCluster, akkaClusterSharding, akkaClusteTools, akkaContrib)
-  val jujuHttp = Seq(/*akkaStream, akkaHttp, akkaHttpCore, akkaHttpJson,*/ sprayCan, sprayRouting, sprayClient, sprayJson, reactivex, sprayTest)
+  val jujuHttp = Seq(akkaStream, akkaHttp, akkaHttpCore, akkaHttpJson, akkaHttpTestKit/* sprayCan, sprayRouting, sprayClient, sprayJson*/, reactivex/*, sprayTest*/)
 }
