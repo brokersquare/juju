@@ -1,9 +1,12 @@
 package juju.kernel.frontend
 
 import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.unmarshalling._
+import juju.infrastructure.CommandProxyFactory
+import juju.messages.Command
 
-
-
+import scala.concurrent.ExecutionContext
 
 
 /*
@@ -93,8 +96,36 @@ trait FrontendService {
 }
 */
 */
+/*
+trait Frontend extends Actor with ActorLogging with FrontendService with PingService {
+  def actorRefFactory = context
+  //implicit def unmarshallerCommand[T <: Command : ClassTag] = Frontend.formUnmarshallerCommand
+   def receive = runRoute(apiRoute ~ pingRoute)
+}*/
 
-trait Frontend {}
+trait FrontendService {
+
+  val apiRoute: Route
+  implicit val ec: ExecutionContext
+
+  def commandProxyFactory : CommandProxyFactory
+  private def commandGateway() = commandProxyFactory.actor
+
+  protected def commandGatewayRoute[C <: Command : FromRequestUnmarshaller] = {
+    import akka.pattern.ask
+
+    import scala.concurrent.duration._
+    implicit val timeout: akka.util.Timeout = 5 seconds
+
+    entity(as[C]) { command =>
+      complete {
+        (commandGateway() ? command).map { _ =>
+          s"command '$command' sent"
+        }
+      }
+    }
+  }
+}
 
 trait PingService {
   def pingRoute = path("ping") {
