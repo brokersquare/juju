@@ -27,10 +27,10 @@ object Dependencies {
     val akkaClusteTools = "com.typesafe.akka" %% "akka-cluster-tools" % Akka
     val akkaContrib = "com.typesafe.akka" %% "akka-contrib" % Akka
 
-    val akkaHttpCore = "com.typesafe.akka" %% "akka-http-core-experimental" % AkkaHttp intransitive()
+    val akkaHttpCore = "com.typesafe.akka" %% "akka-http-core-experimental" % AkkaHttp
     val akkaHttp = "com.typesafe.akka" %% "akka-http-experimental" % AkkaHttp
     val akkaHttpJson = "com.typesafe.akka" %% "akka-http-spray-json-experimental" % AkkaHttp
-    val akkaHttpTestKit = "com.typesafe.akka" %% "akka-http-testkit-experimental" % AkkaHttp intransitive()
+    val akkaHttpTestKit = "com.typesafe.akka" %% "akka-http-testkit-experimental" % AkkaHttp
 
     val scalaReflect = "org.scala-lang" % "scala-reflect" % Scala intransitive()
     val scalaTest = "org.scalatest" %% "scalatest" % ScalaTest % "test"
