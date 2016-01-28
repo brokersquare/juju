@@ -4,6 +4,7 @@ object Versions {
   val Juju = "0.1.0-SNAPSHOT"
   val Scala = "2.11.7"
   val Akka = "2.4.1"
+  val AkkaHttp = "2.0.2"
   val Slf4jSimple = "1.7.13"
   val ScalaLogging = "3.1.0"
   val ScalaTest = "2.2.4"
@@ -26,23 +27,17 @@ object Dependencies {
     val akkaClusteTools = "com.typesafe.akka" %% "akka-cluster-tools" % Akka
     val akkaContrib = "com.typesafe.akka" %% "akka-contrib" % Akka
 
-    val akkaStream = "com.typesafe.akka" %% "akka-stream-experimental" % "2.0.2"
-    val akkaHttpCore = "com.typesafe.akka" %% "akka-http-core-experimental" % "2.0.2"
-    val akkaHttp = "com.typesafe.akka" %% "akka-http-experimental" % "2.0.2"
-    val akkaHttpJson = "com.typesafe.akka" %% "akka-http-spray-json-experimental" % "2.0.2"
-    val akkaHttpTestKit = "com.typesafe.akka" %% "akka-http-testkit-experimental" % "2.0.2"
+    val akkaHttpCore = "com.typesafe.akka" %% "akka-http-core-experimental" % AkkaHttp intransitive()
+    val akkaHttp = "com.typesafe.akka" %% "akka-http-experimental" % AkkaHttp intransitive()
+    val akkaHttpJson = "com.typesafe.akka" %% "akka-http-spray-json-experimental" % AkkaHttp
+    val akkaHttpTestKit = "com.typesafe.akka" %% "akka-http-testkit-experimental" % AkkaHttp intransitive()
 
     val scalaReflect = "org.scala-lang" % "scala-reflect" % Scala intransitive()
-    val sprayCan = "io.spray" %% "spray-can" % Spray intransitive()
-    val sprayRouting = "io.spray" %% "spray-routing" % Spray
-    val sprayJson = "io.spray" %%  "spray-json" % SprayJson  intransitive()
-    val sprayClient = "io.spray" %% "spray-client" % Spray % "test" intransitive()
-    val sprayTest = "io.spray" %% "spray-testkit" % Spray % "test" intransitive()
     val scalaTest = "org.scalatest" %% "scalatest" % ScalaTest % "test"
     val akkaTestkit = "com.typesafe.akka" %% "akka-testkit" % Akka % "test"
   }
   import Compile._
   val core = Seq(scalaReflect, akkaActor, slf4jSimple, akkaPersistence, scalaLogging, reactivex, akkaTestkit, scalaTest)
   val jujuCluster = Seq(akkaRemote, akkaCluster, akkaClusterSharding, akkaClusteTools, akkaContrib)
-  val jujuHttp = Seq(akkaStream, akkaHttp, akkaHttpCore, akkaHttpJson, akkaHttpTestKit/* sprayCan, sprayRouting, sprayClient, sprayJson*/, reactivex/*, sprayTest*/)
+  val jujuHttp = Seq(akkaHttp, akkaHttpCore, akkaHttpJson, akkaHttpTestKit, reactivex)
 }
