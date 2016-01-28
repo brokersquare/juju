@@ -28,7 +28,7 @@ object Dependencies {
     val akkaContrib = "com.typesafe.akka" %% "akka-contrib" % Akka
 
     val akkaHttpCore = "com.typesafe.akka" %% "akka-http-core-experimental" % AkkaHttp intransitive()
-    val akkaHttp = "com.typesafe.akka" %% "akka-http-experimental" % AkkaHttp intransitive()
+    val akkaHttp = "com.typesafe.akka" %% "akka-http-experimental" % AkkaHttp
     val akkaHttpJson = "com.typesafe.akka" %% "akka-http-spray-json-experimental" % AkkaHttp
     val akkaHttpTestKit = "com.typesafe.akka" %% "akka-http-testkit-experimental" % AkkaHttp intransitive()
 
