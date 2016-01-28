@@ -1,111 +1,73 @@
 package juju.kernel.frontend
 
+import akka.actor.{Stash, ActorLogging, Actor}
+import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.unmarshalling._
 import juju.infrastructure.CommandProxyFactory
-import juju.messages.Command
+import juju.messages.{SystemIsUp, Boot, Command}
 
 import scala.concurrent.ExecutionContext
 
+abstract class Frontend extends Actor with ActorLogging with FrontendService with PingService with Stash {
+  import akka.stream.ActorMaterializer
 
-/*
-import akka.actor.{Actor, ActorLogging}
-import juju.messages.Command
-import spray.json._
+  def appname: String
+  def apiPrefix: String = "api"
 
-import scala.reflect.ClassTag
-import scala.reflect.runtime.{universe => ru}
+  implicit val materializer = ActorMaterializer()
 
-object Frontend extends DefaultJsonProtocol {
-/*
-  def formUnmarshallerCommand[T <: Command : ClassTag] = Unmarshaller[T](MediaTypes.`application/x-www-form-urlencoded`) {
-    case e: HttpEntity.NonEmpty => {
-      val u = akka.http.FormDataUnmarshallers.UrlEncodedFormDataUnmarshaller(e)
-      u match {
-        case Right(data) => {
-          val commandType = implicitly[ClassTag[T]].runtimeClass
-          val map: Map[String, String] = data.fields.toMap
+  val commandProxyFactory: CommandProxyFactory
+  override implicit val ec: ExecutionContext = context.dispatcher
 
-          val properties = getCaseClassParameters[T]
+  implicit def s = context.system
+  def config = s.settings.config
 
-          val parameters = properties.map { p =>
-            val fieldname = p._1.toString
-            //TODO:add type check and conversion
-            map.getOrElse(fieldname, () => throw new IllegalArgumentException(s"cannot construct command ${commandType.getSimpleName} due to missing parameter $fieldname"))
-          }
+  def host = config.getString("service.host")
+  def port = config.getInt("service.port")
 
-          val constructor = commandType.getConstructors.head
-          val command = constructor.newInstance(parameters: _*)
-          command.asInstanceOf[T]
+  private val apiRoute = if (apiPrefix != null && apiPrefix != "") {
+    pathPrefix("api") {
+      post {
+        commandApiRoute
+      } ~
+        get {
+          rootRoute
         }
-        case Left(ex) => ???
-      }
     }
-  }
-
-  private def companionMembers(clazzTag: scala.reflect.ClassTag[_]): ru.MemberScope = {
-    val runtimeClass = clazzTag.runtimeClass
-    val rootMirror = ru.runtimeMirror(runtimeClass.getClassLoader)
-    val classSymbol = rootMirror.classSymbol(runtimeClass)
-    // get the companion here
-    classSymbol.companion.typeSignature.members
-  }
-
-  private def getCaseClassParameters[T : ClassTag] :Seq[(ru.Name, ru.Type)]  =
-    companionMembers(scala.reflect.classTag[T])
-      .filter { m => m.isMethod && m.name.toString == "apply"}
-      .head.asMethod.paramLists.head.map(p => (p.name.decodedName, p.info)).toSeq
-*/
-}
-
-trait CommandUnmarshaller {
-  def unmarshallerCommand[T <: Command : ClassTag]() : Unit
-}
-
-trait Frontend extends Actor with ActorLogging /*with FrontendService*/ with PingService {
-  def actorRefFactory = context
-  //implicit def unmarshallerCommand[T <: Command : ClassTag] = Frontend.formUnmarshallerCommand
-  // def receive = runRoute(apiRoute ~ pingRoute)
-}
-/*
-trait FrontendService {
-  self: CommandUnmarshaller =>
-
-  val apiRoute: Route
-
-  def commandProxyFactory : CommandProxyFactory
-  private def commandGateway() = commandProxyFactory.actor
-
-  protected def commandGatewayRoute[C <: Command : Unmarshaller] = {
-    import akka.pattern.ask
-
-    import scala.concurrent.duration._
-    implicit val timeout: akka.util.Timeout = 5 seconds
-    implicit def unmarshaller() = self.unmarshallerCommand()
-    //implicit def ec = actorRefFactory.dispatcher
-
-    entity(as[C]) { command =>
-      complete {
-        (commandGateway() ? command).map { _ =>
-          s"command '$command' sent"
-        }
+  } else {
+    post {
+      commandApiRoute
+    } ~
+      get {
+        rootRoute
       }
-    }
+  }
+
+  def waitForBoot: Actor.Receive = {
+    case Boot =>
+      val booter = sender()
+      Http().bindAndHandle(apiRoute, host, port).onSuccess {
+        case _  =>
+          log.info(s"Http server up and running on $host:$port")
+          context.become(receive)
+          unstashAll()
+          booter ! SystemIsUp(appname)
+      }
+    case _ => stash()
+  }
+
+  context.become(waitForBoot)
+
+  override def receive: Receive = {
+    case m @ _ =>
+      log.debug(s"$appname receive message $m")
   }
 }
-*/
-*/
-/*
-trait Frontend extends Actor with ActorLogging with FrontendService with PingService {
-  def actorRefFactory = context
-  //implicit def unmarshallerCommand[T <: Command : ClassTag] = Frontend.formUnmarshallerCommand
-   def receive = runRoute(apiRoute ~ pingRoute)
-}*/
 
 trait FrontendService {
-
-  val apiRoute: Route
+  def commandApiRoute: Route
   implicit val ec: ExecutionContext
 
   def commandProxyFactory : CommandProxyFactory

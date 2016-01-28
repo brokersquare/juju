@@ -58,14 +58,14 @@ class FrontendServiceSpec extends FlatSpec with Matchers with ScalatestRouteTest
 
   override def commandProxyFactory: CommandProxyFactory =  new FakeCommandProxyFactory(system)
 
-  val apiRoute = pathPrefix("api") {
+  override def commandApiRoute = pathPrefix("api") {
     rootRoute ~ post {
       commandGatewayRoute[FakeSimpleCommand] ~ commandGatewayRoute[FakeSimpleWithNumberParameterCommand]
     }
   }
 
   it should "be ping" in {
-    Get("/api/ping") ~> apiRoute ~> check {
+    Get("/api/ping") ~> commandApiRoute ~> check {
       status shouldBe a [StatusCodes.Success]
       handled shouldBe true
       responseAs[String] shouldEqual "pong!"
@@ -74,7 +74,7 @@ class FrontendServiceSpec extends FlatSpec with Matchers with ScalatestRouteTest
 
   it should "builds and routes the command when the json POST has been called" in {
     val data = HttpEntity(MediaTypes.`application/json`, """{"field1":"pippo","field2":"pluto"}""")
-    Post("/api/fake", data) ~> apiRoute ~> check {
+    Post("/api/fake", data) ~> commandApiRoute ~> check {
       handled shouldBe true
       status shouldBe a [StatusCodes.Success]
 
@@ -109,7 +109,7 @@ class FrontendServiceSpec extends FlatSpec with Matchers with ScalatestRouteTest
 
   it should "unmarshall double fields" in {
     val data = HttpEntity(MediaTypes.`application/json`, """{"field1":"pippo","field2":1.1}""")
-    Post("/api/fake", data) ~> apiRoute ~> check {
+    Post("/api/fake", data) ~> commandApiRoute ~> check {
       handled shouldBe true
       status shouldBe a [StatusCodes.Success]
 
@@ -125,7 +125,7 @@ class FrontendServiceSpec extends FlatSpec with Matchers with ScalatestRouteTest
 
   it should "unmarshall int fields" in {
     val data = HttpEntity(MediaTypes.`application/json`, """{"field1":"pippo","field2":1}""")
-    Post("/api/fake", data) ~> apiRoute ~> check {
+    Post("/api/fake", data) ~> commandApiRoute ~> check {
       handled shouldBe true
       status shouldBe a [StatusCodes.Success]
 
