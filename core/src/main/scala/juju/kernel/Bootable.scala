@@ -25,7 +25,7 @@ trait Bootable {
 
     val className = this.getClass.getName
 
-    log(s"Starting up.. $className with arguments: '$args'")
+    log(s"Starting up.. $className with arguments: '${args.mkString(", ")}'")
     startup()
 
     Runtime.getRuntime.addShutdownHook(new Thread(new Runnable {
