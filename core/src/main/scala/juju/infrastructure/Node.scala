@@ -11,4 +11,5 @@ trait Node {
   def tenant : String = ""
   protected implicit def officeFactory[A <: AggregateRoot[_] : AggregateIdResolution : AggregateRootFactory : ClassTag](implicit system : ActorSystem): OfficeFactory[A]
   protected implicit def sagaRouterFactory[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](implicit system : ActorSystem) : SagaRouterFactory[S]
+  protected def schedulerFactory: AppSchedulerFactory
 }

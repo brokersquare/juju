@@ -8,6 +8,7 @@ import scala.reflect.ClassTag
 
 trait BackendConfig {
   def appname: String
+  def role: String
 
   implicit def aggregateFactory[A <: AggregateRoot[_] : ClassTag]: AggregateRootFactory[A]
   implicit def aggregateIdResolution[A <: AggregateRoot[_] : ClassTag]: AggregateIdResolution[A]

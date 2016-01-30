@@ -9,7 +9,6 @@ object Versions {
   val ScalaLogging = "3.1.0"
   val ScalaTest = "2.2.4"
   val ReactiveX = "0.25.1"
-  val Spray   = "1.3.3"
   val SprayJson   = "1.3.2"
 }
 

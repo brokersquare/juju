@@ -64,13 +64,7 @@ class FrontendServiceSpec extends FlatSpec with Matchers with ScalatestRouteTest
     }
   }
 
-  it should "be ping" in {
-    Get("/api/ping") ~> commandApiRoute ~> check {
-      status shouldBe a [StatusCodes.Success]
-      handled shouldBe true
-      responseAs[String] shouldEqual "pong!"
-    }
-  }
+
 
   it should "builds and routes the command when the json POST has been called" in {
     val data = HttpEntity(MediaTypes.`application/json`, """{"field1":"pippo","field2":"pluto"}""")
@@ -138,6 +132,15 @@ class FrontendServiceSpec extends FlatSpec with Matchers with ScalatestRouteTest
       cmd.field2 shouldEqual 1
     }
   }
+
+  it should "be ping" in {
+    Get("/api/ping") ~> commandApiRoute ~> check {
+      status shouldBe a [StatusCodes.Success]
+      handled shouldBe true
+      responseAs[String] shouldEqual "pong!"
+    }
+  }
+
   /*
     it should "unmarshall date fields" in {
       assert(false, "not yet implemented")
