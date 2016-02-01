@@ -1,9 +1,12 @@
 package juju.domain
 
+import java.lang.reflect.Method
+
 import akka.actor.{ActorRef, ActorLogging, Props}
 import akka.persistence.PersistentActor
 import juju.messages.{RouteTo, DomainEvent, Command}
 
+import scala.annotation.tailrec
 import scala.reflect.ClassTag
 import scala.language.existentials
 
@@ -48,10 +51,12 @@ abstract class AggregateRoot[S <: AggregateState]
   type AggregateStateFactory = PartialFunction[DomainEvent, S]
   val factory : AggregateStateFactory
 
-  private lazy val handlers = this.getClass.getDeclaredMethods
+  /*private lazy val handlers = this.getClass.getDeclaredMethods
     .filter(_.getParameterTypes.length == 1)
     .filter( _.getName == "handle")
     .filter(_.getParameterTypes.head != classOf[Command])
+*/
+  private lazy val handlers = getMethods("handle", classOf[Command])
 
   def handle : Receive = {
     case cmd: Command if isCommandSupported(cmd) =>
@@ -139,5 +144,23 @@ abstract class AggregateRoot[S <: AggregateState]
   override def postStop() = {
     super.postStop()
     stopped = true
+  }
+
+  private def getMethods(methodname: String, parameterType: Class[_]) : Seq[Method] = {
+    val clazz = this.getClass
+
+    @tailrec def loop(c: Class[_], methods: Seq[Method]): Seq[Method] = {
+      val m: Seq[Method] = c.getDeclaredMethods
+        .filter(_.getParameterTypes.length == 1)
+        .filter(_.getName == methodname)
+        .filter(_.getParameterTypes.head != parameterType) ++ methods
+
+      c.getSuperclass match {
+        case s : Class[_] if s == classOf[Object] => m
+        case s => loop(s, m)
+      }
+    }
+
+    loop(clazz, List.empty)
   }
 }

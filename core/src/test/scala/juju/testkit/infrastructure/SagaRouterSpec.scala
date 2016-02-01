@@ -45,6 +45,10 @@ trait SagaRouterSpec extends AkkaSpec {
 
   it should "be able to start the saga due to events and receive an emitted command" in {
     ignoreNoMsg()
+    ignoreMsg {
+      case akka.actor.Status.Success => true
+    }
+
     val tenant = "T1"
     val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant)
     routerRef ! UpdateHandlers(Map.empty + (classOf[ChangeWeight] -> this.testActor))
@@ -64,6 +68,10 @@ trait SagaRouterSpec extends AkkaSpec {
 
   it should "not route domain events depending specific conditions" in {
     ignoreNoMsg()
+    ignoreMsg {
+      case akka.actor.Status.Success => true
+    }
+
     val tenant = "T2"
     val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant)
     routerRef ! UpdateHandlers(Map.empty + (classOf[ChangeWeight] -> this.testActor))
@@ -78,6 +86,10 @@ trait SagaRouterSpec extends AkkaSpec {
 
   it should "route wakeup event to all saga if registered" in {
     ignoreNoMsg()
+    ignoreMsg {
+      case akka.actor.Status.Success => true
+    }
+
     val tenant = "T3"
     val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant)
     routerRef ! UpdateHandlers(Map.empty + (classOf[PublishEcho] -> this.testActor))
@@ -100,11 +112,13 @@ trait SagaRouterSpec extends AkkaSpec {
 
   it should "activate saga by activate message" in {
     ignoreNoMsg()
+    ignoreMsg {
+      case akka.actor.Status.Success => true
+    }
+
     val tenant = "T4"
     val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant)
-    ignoreMsg {
-      case Success => true
-    }
+
     routerRef ! UpdateHandlers(Map.empty + (classOf[PublishEcho] -> this.testActor))
     expectMsgType[Success](timeout.duration)
     routerRef ! PriorityActivitiesActivate("1")
