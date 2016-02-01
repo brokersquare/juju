@@ -4,7 +4,7 @@ object Versions {
   val Juju = "0.1.0-SNAPSHOT"
   val Scala = "2.11.7"
   val Akka = "2.4.1"
-  val AkkaHttp = "2.0.2"
+  val AkkaHttp = "2.0.3"
   val Slf4jSimple = "1.7.13"
   val ScalaLogging = "3.1.0"
   val ScalaTest = "2.2.4"
