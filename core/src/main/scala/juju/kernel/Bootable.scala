@@ -4,9 +4,6 @@ import java.lang.Boolean.getBoolean
 
 
 trait Bootable {
-  def args = _args
-  var _args : Array[String] = _
-
   /**
    * Callback run on microkernel startup.
    * Create initial actors and messages here.
@@ -21,9 +18,11 @@ trait Bootable {
 
   private def quiet = getBoolean("akka.kernel.quiet")
   protected def log(s: String) = if (!quiet) println(s)
-
+  protected def beforeStartup(args: Array[String]) = {}
+  
   def main(args: Array[String]) = {
-    this._args = args
+    beforeStartup(args)
+    
     log(banner)
 
     val className = this.getClass.getName
