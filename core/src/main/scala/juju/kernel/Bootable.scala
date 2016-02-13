@@ -4,6 +4,8 @@ import java.lang.Boolean.getBoolean
 
 
 trait Bootable {
+  def args = _args
+  var _args : Array[String] = _
 
   /**
    * Callback run on microkernel startup.
@@ -21,6 +23,7 @@ trait Bootable {
   protected def log(s: String) = if (!quiet) println(s)
 
   def main(args: Array[String]) = {
+    this._args = args
     log(banner)
 
     val className = this.getClass.getName
