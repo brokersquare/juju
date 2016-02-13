@@ -18,10 +18,9 @@ trait Bootable {
 
   private def quiet = getBoolean("akka.kernel.quiet")
   protected def log(s: String) = if (!quiet) println(s)
-  protected def beforeStartup(args: Array[String]) = {}
-  
+
   def main(args: Array[String]) = {
-    beforeStartup(args)
+    injectSystemPropertiesFromArgs(args)
     
     log(banner)
 
@@ -31,13 +30,24 @@ trait Bootable {
     startup()
 
     Runtime.getRuntime.addShutdownHook(new Thread(new Runnable {
-      def run = {
+      def run() = {
         log("")
         log("Shutting down " + className)
         shutdown()
         log("Successfully shut down " + className)
       }
     }))
+  }
+
+  private def injectSystemPropertiesFromArgs(args: Array[String]): Unit ={
+    args
+      .filter(_.startsWith("-D"))
+      .map(_.substring("-D".length))
+      .map(_.split('='))
+      .filter(p=>System.getProperty(p.head) == null)
+      .foreach { tokens =>
+        System.setProperty(tokens.head, tokens.last)
+      }
   }
 
   //taken from http://patorjk.com/software/taag/
