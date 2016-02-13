@@ -21,13 +21,17 @@ trait App extends juju.kernel.Bootable {
   private var roleApps: Map[String, (ModulePropsFactory[_ <: Module], Config, AfterModuleCreation)] = Map.empty
   private var roleSystems: Map[String, Try[(ActorSystem, ActorRef)]] = Map.empty
 
-  private def appConfig = ConfigFactory.load()
-    .withFallback(ConfigFactory.parseString("juju.timeout = 5s"))
-    .withFallback(ConfigFactory.parseString("akka.cluster.roles = []"))
+  private def appConfig = {
+    ConfigFactory.defaultApplication()
+      .withFallback(ConfigFactory.parseString("juju.timeout = 5s"))
+      .withFallback(ConfigFactory.parseString("akka.cluster.roles = []"))
+  }
+  protected def defaultConfig = {
+    appConfig
+  }
 
-  protected def defaultConfig = appConfig
-
-  def timeout = appConfig getDuration("juju.timeout",TimeUnit.SECONDS) seconds
+  def timeout = {
+    appConfig getDuration("juju.timeout",TimeUnit.SECONDS) seconds}
 
   def registerApp(role: String, propsFactory: ModulePropsFactory[_ <: Module], config: Config = appConfig, afterAppCreation: AfterModuleCreation = (_, app) => app ! Boot): Unit = {
     roleApps = (roleApps filterNot (role == _._1)) + (role ->(propsFactory, config, afterAppCreation))
