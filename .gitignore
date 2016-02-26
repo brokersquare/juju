@@ -8,7 +8,7 @@
 dist/*
 target/
 journal/
-snapshot/
+snapshots/
 lib_managed/
 src_managed/
 project/boot/

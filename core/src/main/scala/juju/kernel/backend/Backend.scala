@@ -7,25 +7,25 @@ import akka.pattern._
 import juju.domain.AggregateRoot.AggregateHandlersResolution
 import juju.domain.Saga.SagaHandlersResolution
 import juju.domain.{AggregateRoot, Saga}
+import juju.infrastructure.AppScheduler.{ScheduleWakeUp, SendActivation}
 import juju.infrastructure._
-import juju.messages.{SystemIsUp, WakeUp}
+import juju.messages.{Activate, SystemIsUp, WakeUp}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.reflect.ClassTag
 
 trait Backend extends Actor with ActorLogging with Stash with Node {
   backendConfig: BackendConfig =>
 
   import juju.messages.Boot
 
-  implicit val system : ActorSystem = context.system
-  implicit val dispatcher = system.dispatcher // The ExecutionContext that will be used
+  implicit def system : ActorSystem = context.system
+  implicit def dispatcher = system.dispatcher // The ExecutionContext that will be used
 
-  val config = system.settings.config
-  implicit val timeout: akka.util.Timeout = config getDuration("juju.timeout",TimeUnit.SECONDS) seconds
+  def config = system.settings.config
+  implicit lazy val timeout: akka.util.Timeout = config getDuration("juju.timeout",TimeUnit.SECONDS) seconds
 
-  val bus = context.actorOf(EventBus.props(), "bus")
+  lazy val bus = context.actorOf(EventBus.props(), EventBus.actorName(tenant))
 
   private var aggregates : Set[RegisterHandlers[_]] = Set.empty
   protected def registerAggregate[A <: AggregateRoot[_] : OfficeFactory : AggregateHandlersResolution]() = {
@@ -37,6 +37,17 @@ trait Backend extends Actor with ActorLogging with Stash with Node {
     sagas = sagas + RegisterSaga[S]
   }
 
+  private var activations: Seq[SendActivation] = Seq.empty
+  protected def registerActivation[A <: Activate](activate: A): Unit = {
+    activations = activations :+ SendActivation(activate)
+  }
+
+  private var wakeups: Seq[_ <: ScheduleWakeUp] = Seq.empty
+  protected def scheduleWakeUp[W <: WakeUp](wakeUp: W, initialDelay: FiniteDuration, interval: FiniteDuration): Unit = {
+    wakeups = wakeups :+ ScheduleWakeUp(wakeUp, initialDelay, interval)
+  }
+  private var scheduler = ActorRef.noSender
+
   def waitForBoot: Actor.Receive = {
     case Boot =>
       val future = for {
@@ -47,8 +58,10 @@ trait Backend extends Actor with ActorLogging with Stash with Node {
       (pipe(future) to sender).future.map(up => {
         context.become(receive)
         unstashAll()
-        scheduleWakeUpMessages()
-        activate()
+
+        scheduler = schedulerFactory.create(tenant, backendConfig.role, context)
+        activations.toSet[SendActivation].foreach(scheduler ! _)
+        wakeups.toSet[ScheduleWakeUp].foreach(scheduler ! _)
       })
     case _ => stash()
   }
@@ -62,22 +75,6 @@ trait Backend extends Actor with ActorLogging with Stash with Node {
 
   override def postStop() : Unit =  {
     bus ! PoisonPill
-  }
-
-  def activate(): Unit = ()
-
-  def scheduleWakeUpMessages(): Unit = ()
-
-  protected def publishWakeUpRunnable[E <: WakeUp : ClassTag](): Runnable = {
-    val tag = implicitly[ClassTag[E]]
-    val eventConstructor = tag.runtimeClass.getConstructor()
-
-    new Runnable {
-      override def run(): Unit = {
-        val message = eventConstructor.newInstance().asInstanceOf[E]
-        bus ! message
-      }
-    }
   }
 
   private def registerHandlers(bus: ActorRef): Future[Seq[HandlersRegistered]] = {

@@ -1,10 +1,13 @@
 package juju.domain
 
+import java.lang.reflect.Method
+
 import akka.actor.{ActorLogging, ActorRef, Props}
 import akka.pattern.ask
 import akka.persistence.{PersistentActor, RecoveryCompleted}
-import juju.messages.{Command, DomainEvent, Activate, WakeUp}
+import juju.messages.{Activate, Command, DomainEvent, WakeUp}
 
+import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -37,6 +40,7 @@ trait Saga extends PersistentActor with ActorLogging {
   log.debug(s"created Saga ${this.getClass.getCanonicalName} with id $sagaId")
   override def persistenceId: String = sagaId
 
+  /*
   private lazy val appliers = this.getClass.getDeclaredMethods
     .filter(_.getParameterTypes.length == 1)
     .filter( _.getName == "apply")
@@ -46,6 +50,9 @@ trait Saga extends PersistentActor with ActorLogging {
     .filter(_.getParameterTypes.length == 1)
     .filter( _.getName == "wakeup")
     .filter(_.getParameterTypes.head != classOf[WakeUp])
+*/
+  private lazy val appliers = getMethods("apply", classOf[DomainEvent])
+  private lazy val wakeups = getMethods("wakeup", classOf[WakeUp])
 
   /**
    * Event handler called on state transition
@@ -104,5 +111,29 @@ trait Saga extends PersistentActor with ActorLogging {
     case e : WakeUp => receiveEvent(e)
     case m@_ =>
       log.warning(s"unexpected message...: '$m'")
+  }
+
+  var stopped = false
+  override def postStop() = {
+    super.postStop()
+    stopped = true
+  }
+
+  private def getMethods(methodname: String, parameterType: Class[_]) : Seq[Method] = {
+    val clazz = this.getClass
+
+    @tailrec def loop(c: Class[_], methods: Seq[Method]): Seq[Method] = {
+      val m: Seq[Method] = c.getDeclaredMethods
+        .filter(_.getParameterTypes.length == 1)
+        .filter(_.getName == methodname)
+        .filter(_.getParameterTypes.head != parameterType) ++ methods
+
+      c.getSuperclass match {
+        case s : Class[_] if s == classOf[Object] => m
+        case s => loop(s, m)
+      }
+    }
+
+    loop(clazz, List.empty)
   }
 }

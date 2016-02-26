@@ -1,5 +1,6 @@
 package juju.domain.resolvers
 
+import akka.actor.ActorRef
 import juju.domain.AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution}
 import juju.domain._
 import juju.domain.resolvers.ByConventionsSpec._
@@ -19,6 +20,12 @@ class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
     supportedCommands should contain allOf(classOf[CreatePerson], classOf[ChangeWeight], classOf[ChangeHeight])
   }
 
+  it should "retrieves commands supported by the aggregate implemented in superclass" in {
+    class PersonAggregateExtended extends PersonAggregate  {}
+    val supportedCommands = ByConventions.aggregateHandlersResolution[PersonAggregateExtended]().resolve()
+    supportedCommands should contain allOf(classOf[CreatePerson], classOf[ChangeWeight], classOf[ChangeHeight])
+  }
+
   it should "returns empty if aggregate doesn't provide handle specific methods" in {
     val supportedCommands = ByConventions.aggregateHandlersResolution[ColorAggregate]().resolve()
     supportedCommands should be('empty)
@@ -35,8 +42,9 @@ class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
     expectMsg(WeightChanged("giangi", 80))
   }
 
-  it should "extract aggregate id from command using byConvention resolver" in {
-    val aggregateId = ByConventions.aggregateIdResolution[AggregateWithValidHandleAnnotation]().resolve(ChangeWeight("giangi", 80))
+  it should "extract aggregate id from command using byConvention resolver implemented in superclass" in {
+    class AggregateWithValidHandleAnnotationExtended extends AggregateWithValidHandleAnnotation  {}
+    val aggregateId = ByConventions.aggregateIdResolution[AggregateWithValidHandleAnnotationExtended]().resolve(ChangeWeight("giangi", 80))
     aggregateId shouldBe "giangi"
   }
 
@@ -97,6 +105,12 @@ class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
     supportedEvents should contain allOf(classOf[WeightChanged], classOf[PublishRequested])
   }
 
+  it should "retrieves events supported by the saga implemented in superclass" in {
+    class AveragePersonWeightSagaExtended(correlationId: String, commandRouter: ActorRef) extends AveragePersonWeightSaga(correlationId, commandRouter)  {}
+    val supportedEvents = ByConventions.sagaHandlersResolution[AveragePersonWeightSagaExtended]().resolve()
+    supportedEvents should contain allOf(classOf[WeightChanged], classOf[PublishRequested])
+  }
+
   it should "returns empty if saga doesn't provide apply specific methods" in {
     val supportedEvents = ByConventions.sagaHandlersResolution[PriorityActivitiesSaga]().resolve()
     supportedEvents should be('empty)
@@ -104,6 +118,12 @@ class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
 
   it should "retrieves wakeup supported by the saga" in {
     val supportedWakeups = ByConventions.sagaHandlersResolution[AveragePersonWeightSaga]().wakeUpBy()
+    supportedWakeups should contain(classOf[PublishWakeUp])
+  }
+
+  it should "retrieves wakeup supported by the saga implemented in superclass" in {
+    class AveragePersonWeightSagaExtended(correlationId: String, commandRouter: ActorRef) extends AveragePersonWeightSaga(correlationId, commandRouter)  {}
+    val supportedWakeups = ByConventions.sagaHandlersResolution[AveragePersonWeightSagaExtended]().wakeUpBy()
     supportedWakeups should contain(classOf[PublishWakeUp])
   }
 
@@ -118,6 +138,15 @@ class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
     val clazz = supportedActivate.get.getName
     clazz should be(classOf[SagaActivate].getName)
   }
+
+  it should "retrieves activate supported by the saga implemented in superclass" in {
+    class SagaWithActivationExtended extends SagaWithActivation  {}
+    val supportedActivate = ByConventions.sagaHandlersResolution[SagaWithActivationExtended]().activateBy()
+    supportedActivate should not be None
+    val clazz = supportedActivate.get.getName
+    clazz should be(classOf[SagaActivate].getName)
+  }
+
 
   it should "returns None if saga doesn't provide activate annotation" in {
     val supportedActivates = ByConventions.sagaHandlersResolution[SagaWithNoActivationAnnotation]().activateBy()

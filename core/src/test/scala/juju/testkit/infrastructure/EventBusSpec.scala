@@ -41,6 +41,12 @@ trait EventBusSpec extends AkkaSpec {
 
   it should "be able to send a command" in {
     _tenant = "t3"
+    ignoreNoMsg()
+    ignoreMsg {
+      case _ : HandlersRegistered => false
+      case _ : PriorityCreated => false
+      case _ => true
+    }
     withEventBus(Seq(classOf[PriorityCreated])) { busRef =>
       busRef ! RegisterHandlers[PriorityAggregate]
       expectMsgType[HandlersRegistered](timeout.duration)
@@ -54,6 +60,12 @@ trait EventBusSpec extends AkkaSpec {
     implicit def idResolution[A <: AggregateRoot[_] : ClassTag]: AggregateIdResolution[A] = ByConventions.aggregateIdResolution[A]()
     implicit def factory[A <: AggregateRoot[_] : ClassTag]: AggregateRootFactory[A] = ByConventions.aggregateFactory[A]()
     implicit def handlersResolution[A <: AggregateRoot[_] : ClassTag]: AggregateHandlersResolution[A] = ByConventions.aggregateHandlersResolution[A]()
+
+    ignoreMsg {
+      case _ : HandlersRegistered => false
+      case _ : PostcardDelivered => false
+      case _ => true
+    }
 
     withEventBus(Seq(classOf[PostcardDelivered])) { busRef =>
       busRef ! RegisterHandlers[PersonAggregate]
@@ -69,6 +81,7 @@ trait EventBusSpec extends AkkaSpec {
 
   it should "be able to register saga" in {
     _tenant = "t5"
+    ignoreNoMsg()
     withEventBus { busRef =>
       busRef ! RegisterSaga[PriorityActivitiesSaga]()
       expectMsgPF(timeout.duration) {
@@ -85,6 +98,12 @@ trait EventBusSpec extends AkkaSpec {
   it should "be able to execute saga workflow" in {
     _tenant = "t6"
     withEventBus(Seq(classOf[WeightChanged])) { busRef =>
+      ignoreMsg {
+        case _ : HandlersRegistered => false
+        case _ : DomainEventsSubscribed => false
+        case _ : WeightChanged => false
+        case _ => true
+      }
 
       busRef ! RegisterHandlers[PriorityAggregate]
       expectMsgType[HandlersRegistered](timeout.duration)
