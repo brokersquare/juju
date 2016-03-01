@@ -1,23 +1,22 @@
 package juju.sample
 
 import akka.actor.Props
-import ColorAggregate.{ChangeWeight, WeightChanged}
-import juju.domain.{AggregateRoot, AggregateState, AggregateRootFactory}
-import AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution}
-import juju.domain.{AggregateState, AggregateRootFactory}
+import juju.domain.AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution}
+import juju.domain.{AggregateRoot, AggregateRootFactory, AggregateState}
 import juju.messages.{Command, DomainEvent}
+import juju.sample.ColorAggregate.{ChangeHeavy, HeavyChanged}
 
 object ColorAggregate {
   implicit val idResolution = new AggregateIdResolution[ColorAggregate] {
     def resolve(command: Command) : String = command match {
-      case ChangeWeight(color, _) => color
+      case ChangeHeavy(color, _) => color
       case _ => ???
     }
   }
 
   implicit val handlersResolution = new AggregateHandlersResolution[ColorAggregate] {
     def resolve() : Seq[Class[_ <: Command]] = {
-      Seq(classOf[ChangeWeight])
+      Seq(classOf[ChangeHeavy])
     }
   }
 
@@ -25,24 +24,24 @@ object ColorAggregate {
     override def props: Props = Props(classOf[ColorAggregate])
   }
 
-  case class ChangeWeight(color: String, weight: Int) extends Command
-  case class WeightChanged(color: String, weight: Int) extends DomainEvent
+  case class ChangeHeavy(color: String, heavy: Int) extends Command
+  case class HeavyChanged(color: String, heavy: Int) extends DomainEvent
 }
 
-case class ColorState(color: String = "", weight: Int = 0) extends AggregateState {
+case class ColorState(color: String = "", heavy: Int = 0) extends AggregateState {
   override def apply = {
-    case WeightChanged(c, w) => copy(weight = w)
+    case HeavyChanged(c, h) => copy(heavy = h)
     case _ => ???
   }
 }
 
 class ColorAggregate extends AggregateRoot[ColorState] {
   override val factory: AggregateStateFactory = {
-    case WeightChanged(color, v) => ColorState(color, v)
+    case HeavyChanged(color, v) => ColorState(color, v)
     case _ => throw new IllegalArgumentException("Cannot create state from event different that ColorAssigned type")
   }
 
   override def handle : Receive = {
-    case ChangeWeight(c,w) => raise(WeightChanged(c,w))
+    case ChangeHeavy(c,h) => raise(HeavyChanged(c,h))
   }
 }

@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, Props}
 import juju.domain.Saga.{SagaCorrelationIdResolution, SagaHandlersResolution}
 import juju.domain.{Saga, SagaFactory}
 import juju.messages.{Activate, Command, DomainEvent, WakeUp}
-import juju.sample.ColorAggregate.ChangeWeight
+import juju.sample.ColorAggregate.ChangeHeavy
 import juju.sample.ColorPriorityAggregate.ColorAssigned
 import juju.sample.PriorityActivitiesSaga.{EchoReady, EchoWakeUp, PublishEcho}
 import juju.sample.PriorityAggregate.{PriorityDecreased, PriorityIncreased}
@@ -23,7 +23,6 @@ object PriorityActivitiesSaga {
       case PriorityDecreased(_, p) => Some(p.toString)
       case ColorAssigned(p, c) if p == -1  => None
       case ColorAssigned(p, c) => Some(p.toString)
-      case _ => ???
     }
   }
 
@@ -65,13 +64,12 @@ class PriorityActivitiesSaga(val priority: Int, commandRouter: ActorRef) extends
     case e@PriorityDecreased(_, p) if priority == p || priority == -1 => raise(e)
     case e@ColorAssigned(p, c) if priority == p || priority == -1 || c != color => raise(e)
     case EchoWakeUp(txt) => raise(EchoReady(txt))
-    case _ => ???
   }
 
   def deliveryChangeWeightIfNeeded(activities : Int): Unit = {
     log.debug(s"delivery command to signal $activities")
     if (color != "") {
-      deliverCommand(commandRouter, ChangeWeight(color, activities))
+      deliverCommand(commandRouter, ChangeHeavy(color, activities))
     }
   }
 }

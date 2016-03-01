@@ -8,7 +8,7 @@ import juju.domain.{Saga, SagaFactory}
 import juju.infrastructure.SagaRouter.SagaIsUp
 import juju.infrastructure.UpdateHandlers
 import juju.messages.DomainEvent
-import juju.sample.ColorAggregate.ChangeWeight
+import juju.sample.ColorAggregate.ChangeHeavy
 import juju.sample.ColorPriorityAggregate.ColorAssigned
 import juju.sample.PriorityActivitiesSaga
 import juju.sample.PriorityActivitiesSaga.{PriorityActivitiesActivate, EchoWakeUp, PublishEcho}
@@ -51,7 +51,7 @@ trait SagaRouterSpec extends AkkaSpec {
 
     val tenant = "T1"
     val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant)
-    routerRef ! UpdateHandlers(Map.empty + (classOf[ChangeWeight] -> this.testActor))
+    routerRef ! UpdateHandlers(Map.empty + (classOf[ChangeHeavy] -> this.testActor))
     expectMsgType[Success](timeout.duration)
 
     publish(tenant, routerRef, PriorityIncreased("x", 1))
@@ -60,7 +60,7 @@ trait SagaRouterSpec extends AkkaSpec {
     expectMsgType[SagaIsUp](timeout.duration)
 
     expectMsgPF(timeout.duration) {
-      case m@ChangeWeight("red", _) =>
+      case m@ChangeHeavy("red", _) =>
     }
 
     shutdownRouter[PriorityActivitiesSaga](tenant, routerRef)
@@ -74,7 +74,7 @@ trait SagaRouterSpec extends AkkaSpec {
 
     val tenant = "T2"
     val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant)
-    routerRef ! UpdateHandlers(Map.empty + (classOf[ChangeWeight] -> this.testActor))
+    routerRef ! UpdateHandlers(Map.empty + (classOf[ChangeHeavy] -> this.testActor))
     expectMsgType[Success](timeout.duration)
 
     publish(tenant, routerRef, PriorityIncreased("x", -1)) //-1 doesn't route event

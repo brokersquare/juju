@@ -84,7 +84,6 @@ class LocalSagaRouter[S <: Saga](tenant: String)(implicit ct: ClassTag[S], handl
     case UpdateHandlers(h) =>
       handlers = h
       sender ! akka.actor.Status.Success(h)
-    case _ => ???
   }
 
   private def getOrCreateSaga(correlationId: String): ActorRef = {

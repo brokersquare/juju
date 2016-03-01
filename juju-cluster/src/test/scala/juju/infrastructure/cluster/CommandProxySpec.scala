@@ -15,7 +15,7 @@ class CommandProxySpec extends ClusterDomainSpec("CommandProxy", ClusterDomainSp
   var _tenant = ""
   override def tenant = _tenant
 
-  override def withEventBus(subscribedEvents : Seq[Class[_]])(action : ActorRef => Unit) = {
+  override def withEventBus(subscriber: ActorRef, subscribedEvents : Seq[Class[_]])(action : ActorRef => Unit) = {
     val events = subscribedEvents map(_.getSimpleName)
     var busRef: ActorRef = null
     val mediator = DistributedPubSub(system).mediator
@@ -24,15 +24,15 @@ class CommandProxySpec extends ClusterDomainSpec("CommandProxy", ClusterDomainSp
       busRef = system.actorOf(EventBus.props(tenant),EventBus.nameWithTenant(tenant, "Bus"))
       val subscriptionGroup = "testGroup"
       events.foreach { e =>
-        mediator ! Subscribe(EventBus.nameWithTenant(tenant, e), Some(EventBus.nameWithTenant(tenant, subscriptionGroup)), this.testActor)
-        expectMsg(SubscribeAck(Subscribe(EventBus.nameWithTenant(tenant, e), Some(EventBus.nameWithTenant(tenant, subscriptionGroup)), this.testActor)))
+        mediator ! Subscribe(EventBus.nameWithTenant(tenant, e), Some(EventBus.nameWithTenant(tenant, subscriptionGroup)), subscriber)
+        expectMsg(SubscribeAck(Subscribe(EventBus.nameWithTenant(tenant, e), Some(EventBus.nameWithTenant(tenant, subscriptionGroup)), subscriber)))
       }
 
       action(busRef)
     } finally {
       events.foreach { e =>
-        mediator ! Unsubscribe(EventBus.nameWithTenant(tenant, e), None, this.testActor)
-        expectMsg(UnsubscribeAck(Unsubscribe(EventBus.nameWithTenant(tenant, e), None, this.testActor)))
+        mediator ! Unsubscribe(EventBus.nameWithTenant(tenant, e), None, subscriber)
+        expectMsg(UnsubscribeAck(Unsubscribe(EventBus.nameWithTenant(tenant, e), None, subscriber)))
       }
 
       if (busRef != null) busRef ! PoisonPill
@@ -45,7 +45,7 @@ class CommandProxySpec extends ClusterDomainSpec("CommandProxy", ClusterDomainSp
     _tenant = "t1"
     val clientSystem = servers.last
 
-    withEventBus { bus =>
+    withEventBus(this.testActor) { bus =>
       bus ! RegisterHandlers[PriorityAggregate]
       expectMsgPF(timeout.duration) {
         case HandlersRegistered(handlers) =>

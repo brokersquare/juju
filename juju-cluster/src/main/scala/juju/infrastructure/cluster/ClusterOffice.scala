@@ -6,12 +6,14 @@ import akka.actor._
 import akka.cluster.pubsub.DistributedPubSub
 import akka.cluster.pubsub.DistributedPubSubMediator.Publish
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
+import akka.pattern.{ask, pipe}
 import akka.serialization.Serialization
 import akka.util.Timeout
-import juju.domain.AggregateRoot.AggregateIdResolution
+import juju.domain.AggregateRoot.{CommandReceiveFailure, CommandReceived, AggregateIdResolution}
 import juju.domain.{AggregateRoot, AggregateRootFactory}
+import juju.infrastructure.Timer.StopTimer
 import juju.infrastructure.{EventBus, OfficeFactory, UpdateHandlers}
-import juju.messages.{RouteTo, Command, DomainEvent}
+import juju.messages.{Command, DomainEvent, RouteTo}
 
 import scala.concurrent.Await
 import scala.concurrent.duration.{FiniteDuration, _}
@@ -39,6 +41,9 @@ object ClusterOffice {
 
 class ClusterOfficeProxy[A <: AggregateRoot[_] : AggregateIdResolution : AggregateRootFactory : ClassTag](tenant: String, officeName: String) extends Actor with ActorLogging {
   private val system = context.system
+  implicit val ec = system.dispatcher
+  implicit val timeout = Timeout(context.system.settings.config.getDuration("juju.eventbus.timeout", TimeUnit.SECONDS), TimeUnit.SECONDS)
+
   val shardRegion = getOrCreate
   val aggregateName = implicitly[ClassTag[A]].runtimeClass.getSimpleName //TODO: take it from an aggregate name service
 
@@ -57,6 +62,9 @@ class ClusterOfficeProxy[A <: AggregateRoot[_] : AggregateIdResolution : Aggrega
         val actor = handlers.values.filter(_.path.name.endsWith(m.destinationClass.getName)).head
         actor ! m
       }
+    case c: Command =>
+      val s = sender()
+      shardRegion.ask(c)(timeout.duration).pipeTo(s)
     case m =>
       shardRegion ! m
   }
@@ -82,13 +90,11 @@ class ClusterOfficeProxy[A <: AggregateRoot[_] : AggregateIdResolution : Aggrega
     val idExtractor: ShardRegion.ExtractEntityId = {
       case cmd : Command => (resolution.resolve(cmd), cmd)
       case m : RouteTo => (m.destinationId, m)
-      case _ => ???
     }
 
     val shardResolver: ShardRegion.ExtractShardId = {
       case cmd: Command => Integer.toHexString(resolution.resolve(cmd).hashCode).charAt(0).toString
       case m: RouteTo => Integer.toHexString(m.destinationId.hashCode).charAt(0).toString
-      case _ => ???
     }
 
     val officeProps = Props(classOf[ClusterOffice], tenant, aggregateProps, self)
@@ -98,17 +104,28 @@ class ClusterOfficeProxy[A <: AggregateRoot[_] : AggregateIdResolution : Aggrega
 }
 
 class ClusterOffice(tenant: String, aggregateProps: Props, proxy: ActorRef) extends Actor with ActorLogging {
+  implicit val timeout = Timeout(context.system.settings.config.getDuration("juju.eventbus.timeout", TimeUnit.SECONDS), TimeUnit.SECONDS)
+
   val address = Serialization.serializedActorPath(self)
   var aggregateRef : Option[ActorRef] = None
   val mediator = DistributedPubSub(context.system).mediator
+  implicit val ec = context.system.dispatcher
 
   //TODO: set supervisor strategy
+
+
+  var waitingAcks: Map[ActorRef, (ActorRef, Command)] = Map.empty
 
   override def receive: Receive = {
     case cmd : Command =>
       val aref = ref
-      aref ! cmd //TODO: do retry in case of timeout???
-      log.debug(s"[$address]route $cmd to aggregate ${aggregateRef.get}")
+      val s = sender()
+      log.debug(s"[$address]routing $cmd to aggregate ${aggregateRef.get}")
+      aref ! cmd
+      val timer = context.actorOf(juju.infrastructure.Timer.props(timeout.duration))
+      context.watch(timer)
+      waitingAcks += (timer -> (s,cmd))
+
     case event : DomainEvent =>
       val subscribedEventName = EventBus.nameWithTenant(tenant, event)
       mediator ! Publish(subscribedEventName, event, sendOneMessageToEachGroup = true)
@@ -122,6 +139,31 @@ class ClusterOffice(tenant: String, aggregateProps: Props, proxy: ActorRef) exte
       if (aref.path.name == m.senderId) {
         proxy ! m
       }
+
+    case m@akka.actor.Status.Success(CommandReceived(cmd)) =>
+      waitingAcks.find {kv => kv._2._2 == cmd} match {
+        case Some((t, (s, _))) =>
+          s ! m
+          t ! StopTimer
+          waitingAcks -= t
+        case None =>
+      }
+
+    case m@akka.actor.Status.Failure(CommandReceiveFailure(cmd, _)) =>
+      waitingAcks.find {kv => kv._2._2 == cmd} match {
+        case Some((t, (s, _))) =>
+          s ! m
+          t ! StopTimer
+          waitingAcks -= t
+        case None =>
+      }
+
+    case Terminated(ref) if waitingAcks.contains(ref) =>
+      val (s, cmd) = waitingAcks.get(ref).get
+      waitingAcks -= ref
+      s ! akka.actor.Status.Failure(new akka.pattern.AskTimeoutException(s"A timeout expired waiting for sending command $cmd"))
+
+    case Terminated(ref) if !waitingAcks.contains(ref) =>
 
     case e =>
       log.debug(s"[$address]detected message $e")

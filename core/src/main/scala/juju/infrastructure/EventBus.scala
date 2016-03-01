@@ -1,8 +1,10 @@
 package juju.infrastructure
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.Status.Failure
 import akka.actor._
-import akka.pattern.ask
+import akka.pattern.{ask, pipe}
 import akka.util.Timeout
 import juju.domain.AggregateRoot.AggregateHandlersResolution
 import juju.domain.Saga.SagaHandlersResolution
@@ -31,7 +33,14 @@ object EventBus {
 }
 
 case object HandlerNotDefinedException extends Exception
+case class CommandSendFailure(command: Command, cause: Throwable) extends Exception(cause)
+case class ActivationSendFailure(activate: Activate, cause: Throwable) extends Exception(cause)
+//case class WakeUpSendFailure(wakeUp: WakeUp, cause: Throwable) extends Exception(cause)
+
+case class RegisterHandlersFailure(register: RegisterHandlers[_ <: AggregateRoot[_]], cause: Throwable) extends Exception(cause)
+case class RegisterSagaFailure(register: RegisterSaga[_ <: Saga], cause: Throwable) extends Exception(cause)
 case class MessageNotSupported(text: String) extends Exception(text)
+
 case class UpdateHandlers(handlers : Map[Class[_ <: Command], ActorRef]) extends InfrastructureMessage
 
 case class RegisterHandlers[A <: AggregateRoot[_]](implicit val officeFactory: OfficeFactory[A], val resolver: AggregateHandlersResolution[A]) extends InfrastructureMessage
@@ -44,7 +53,7 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
   var activates = Map[Class[_ <: Activate], ActorRef]()
   var handlers = Map[Class[_ <: Command], ActorRef]()
   var wakeUps = Map[Class[_ <: WakeUp], Seq[ActorRef]]()
-  implicit val timeout = Timeout(5 seconds) //TODO: pass as parameter to the eventbus
+  implicit val timeout = Timeout(context.system.settings.config.getDuration("juju.eventbus.timeout", TimeUnit.SECONDS), TimeUnit.SECONDS)
   implicit val executeContext = context.dispatcher
 
   log.debug("EventBus is up and running")
@@ -58,8 +67,15 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
 
       handlers.get(commandType) match {
         case Some(office) =>
-          office ! command
-          sender ! akka.actor.Status.Success(command)
+          val s = sender()
+          office.ask(command)(timeout.duration, self)
+            .map { case _ =>
+              log.debug(s"command $command sent to $s")
+              s ! akka.actor.Status.Success(command)
+            }.onFailure { case f =>
+            log.warning(s"cannot send $command to $s due to $f")
+            s ! akka.actor.Status.Failure(CommandSendFailure(command, f))
+          }
         case None =>
           sender ! akka.actor.Status.Failure(HandlerNotDefinedException)
       }
@@ -67,8 +83,19 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
     case activate : Activate =>
       log.debug(s"activator $activate requested")
       activates.get(activate.getClass) match {
-        case Some(destRef) => destRef ! activate
-        case None => 
+        case Some(destRef) =>
+          val s = sender()
+          destRef.ask(activate, self)(timeout.duration)
+            .map {case _ =>
+              s ! akka.actor.Status.Success(activate)
+              log.debug(s"activate $activate sent to $destRef")
+            }
+            .onFailure {case f =>
+              s ! akka.actor.Status.Success(ActivationSendFailure(activate,f))
+              log.warning(s"cannot send $activate to $destRef due to $f")
+            }
+
+        case None =>
       }
 
     case wakeUp : WakeUp =>
@@ -77,7 +104,9 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
       wakeUps.get(wakeUpClass) match {
         case Some(destRefs) => destRefs foreach {
           ref => {
-              ref ! wakeUp
+            ref.ask(wakeUp, self)(timeout.duration) //TODO: manage failures and return an aggregated result
+              .map {case _ => log.debug(s"wakeup $wakeUp sent to $ref")}
+              .onFailure {case f => log.warning(s"cannot send $wakeUp to $ref due to $f")}
             }
         }
         case None =>
@@ -89,23 +118,29 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
       val s = sender()
       //TODO: check if handler already set to a different ref and if yes error
       val office : ActorRef = Office.office[a](tenant)(msg.officeFactory)
-      //TODO: monitor the office through DeathWatch
+      context.watch(office)
+
       val pairs = msg.resolver.resolve().map(c => c -> office)
       handlers = List(handlers.toList, pairs.toList).flatten.toMap
       val futures = handlers.values map {
         _.ask(UpdateHandlers(handlers))
       }
 
-      Future.sequence(futures).onSuccess {
+      Future.sequence(futures).map {
         case results =>
           s ! HandlersRegistered(handlers.keys)
           log.debug(s"aggregate $office registered")
+      }.onFailure {
+        case failure =>
+          s ! akka.actor.Status.Failure(RegisterHandlersFailure(msg, failure))
+          log.warning(s"cannot register handlers $msg due to $failure")
       }
 
     case msg : RegisterSaga[s] =>
       val s = sender()
 
       val routerRef = SagaRouter.router[s](tenant)(msg.routerFactory)
+      context.watch(routerRef)
 
       msg.resolver.activateBy() match {
         case Some(m) =>
@@ -125,11 +160,19 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
           log.debug(s"wakeup '$wakeUpClass' for '$routerRef' registered")
       }
 
-      routerRef.ask(UpdateHandlers(handlers)).onSuccess {
+      routerRef.ask(UpdateHandlers(handlers))(timeout.duration).map {
         case results =>
           routerRef.tell(GetSubscribedDomainEvents, s)
           log.debug(s"saga $routerRef registered")
+      }.onFailure {
+        case failure =>
+          s ! akka.actor.Status.Failure(RegisterSagaFailure(msg, failure))
+          log.warning(s"cannot register saga $msg due to $failure")
       }
+
+    case t: Terminated =>
+      log.warning(s"received Terminated $t from ${sender()}. How I can manage this?!?!?!")
+
     case msg@_ =>
       val errorText = s"EventBus received unexpected message $msg"
       sender ! Failure(new MessageNotSupported(errorText))

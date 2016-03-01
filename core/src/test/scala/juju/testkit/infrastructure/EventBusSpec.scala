@@ -1,14 +1,15 @@
 package juju.testkit.infrastructure
 
+import akka.testkit.TestProbe
 import juju.domain.AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution}
 import juju.domain.resolvers.ByConventions
 import juju.domain.{AggregateRoot, AggregateRootFactory}
 import juju.infrastructure._
-import juju.sample.ColorAggregate.WeightChanged
-import juju.sample.ColorPriorityAggregate.{AssignColor, ColorAssigned}
-import juju.sample.PersonAggregate._
+import juju.sample.ColorAggregate.HeavyChanged
+import juju.sample.ColorPriorityAggregate.{ColorAssigned, AssignColor}
+import juju.sample.PersonAggregate.{CreatePerson, PostcardDelivered, SendPostcard}
 import juju.sample.PriorityAggregate._
-import juju.sample.{ColorAggregate, ColorPriorityAggregate, PriorityActivitiesSaga, PriorityAggregate, _}
+import juju.sample._
 import juju.testkit.AkkaSpec
 
 import scala.language.existentials
@@ -18,12 +19,37 @@ trait EventBusSpec extends AkkaSpec {
   var _tenant = ""
   override def tenant = _tenant
 
-  it should "be able to register handlers" in {
+  it should "be able to publish an event after a command send" in {
     _tenant = "t1"
-    withEventBus { busRef =>
-      busRef ! RegisterHandlers[PriorityAggregate]
+    val probe = TestProbe()
 
-      expectMsgPF(timeout.duration) {
+    probe.ignoreMsg {
+      case _ : HandlersRegistered => false
+      case _ : PriorityCreated => false
+      case _ => true
+    }
+    withEventBus(probe.ref, Seq(classOf[PriorityCreated])) { busRef =>
+      probe.send(busRef, RegisterHandlers[PriorityAggregate])
+      probe.expectMsgType[HandlersRegistered](timeout.duration)
+
+      probe.send(busRef, CreatePriority("fake"))
+      probe.expectMsg(timeout.duration, PriorityCreated("fake"))
+    }
+  }
+
+  it should "be able to register handlers" in {
+    _tenant = "t2"
+
+    val probe = TestProbe()
+    probe.ignoreMsg {
+      case _ : HandlersRegistered => false
+      case _ => true
+    }
+
+    withEventBus(probe.ref) { busRef =>
+      probe.send(busRef, RegisterHandlers[PriorityAggregate])
+
+      probe.expectMsgPF(timeout.duration) {
         case HandlersRegistered(handlers) =>
           handlers should contain(classOf[CreatePriority])
           handlers should contain(classOf[IncreasePriority])
@@ -32,59 +58,75 @@ trait EventBusSpec extends AkkaSpec {
   }
 
   it should "not able to send a message with no registered handler" in {
-    _tenant = "t2"
-    withEventBus { busRef =>
-      busRef ! CreatePriority("fake")
-      expectMsg(akka.actor.Status.Failure(HandlerNotDefinedException))
+    _tenant = "t3"
+
+    val probe = TestProbe()
+    probe.ignoreMsg {
+      case akka.actor.Status.Failure(HandlerNotDefinedException) => false
+      case _ => true
+    }
+
+    withEventBus(probe.ref) { busRef =>
+      probe.send(busRef, CreatePriority("fake"))
+      probe.expectMsg(akka.actor.Status.Failure(HandlerNotDefinedException))
     }
   }
 
-  it should "be able to send a command" in {
-    _tenant = "t3"
-    ignoreNoMsg()
-    ignoreMsg {
+  it should "send an Ack when a successful command send" in {
+    _tenant = "t4"
+
+    val probe = TestProbe()
+    probe.ignoreMsg {
       case _ : HandlersRegistered => false
-      case _ : PriorityCreated => false
+      case akka.actor.Status.Success(_) => false
       case _ => true
     }
-    withEventBus(Seq(classOf[PriorityCreated])) { busRef =>
-      busRef ! RegisterHandlers[PriorityAggregate]
-      expectMsgType[HandlersRegistered](timeout.duration)
-      busRef ! CreatePriority("fake")
-      expectMsg(timeout.duration, PriorityCreated("fake"))
+    withEventBus(probe.ref, Seq(classOf[PriorityCreated])) { busRef =>
+      probe.send(busRef, RegisterHandlers[PriorityAggregate])
+      probe.expectMsgType[HandlersRegistered](timeout.duration)
+
+      probe.send(busRef, CreatePriority("fake"))
+      probe.expectMsg(akka.actor.Status.Success(CreatePriority("fake")))
     }
   }
 
   it should "be able to delivery messages between aggregates" in {
-    _tenant = "t4"
-    implicit def idResolution[A <: AggregateRoot[_] : ClassTag]: AggregateIdResolution[A] = ByConventions.aggregateIdResolution[A]()
-    implicit def factory[A <: AggregateRoot[_] : ClassTag]: AggregateRootFactory[A] = ByConventions.aggregateFactory[A]()
-    implicit def handlersResolution[A <: AggregateRoot[_] : ClassTag]: AggregateHandlersResolution[A] = ByConventions.aggregateHandlersResolution[A]()
+    _tenant = "t5"
 
-    ignoreMsg {
+    val probe = TestProbe()
+    probe.ignoreMsg {
       case _ : HandlersRegistered => false
       case _ : PostcardDelivered => false
       case _ => true
     }
 
-    withEventBus(Seq(classOf[PostcardDelivered])) { busRef =>
-      busRef ! RegisterHandlers[PersonAggregate]
-      expectMsgType[HandlersRegistered](timeout.duration)
+    implicit def idResolution[A <: AggregateRoot[_] : ClassTag]: AggregateIdResolution[A] = ByConventions.aggregateIdResolution[A]()
+    implicit def factory[A <: AggregateRoot[_] : ClassTag]: AggregateRootFactory[A] = ByConventions.aggregateFactory[A]()
+    implicit def handlersResolution[A <: AggregateRoot[_] : ClassTag]: AggregateHandlersResolution[A] = ByConventions.aggregateHandlersResolution[A]()
 
-      busRef ! CreatePerson("pippo")
-      busRef ! CreatePerson("pluto")
+    withEventBus(probe.ref, Seq(classOf[PostcardDelivered])) { busRef =>
+      probe.send(busRef, RegisterHandlers[PersonAggregate])
+      probe.expectMsgType[HandlersRegistered](timeout.duration)
 
-      busRef ! SendPostcard("pluto", "pippo", "bau bau")
-      expectMsg(timeout.duration, PostcardDelivered("pluto", "pippo", "bau bau"))
+      probe.send(busRef, CreatePerson("pippo"))
+      probe.send(busRef, CreatePerson("pluto"))
+      probe.send(busRef, SendPostcard("pluto", "pippo", "bau bau"))
+
+      probe.expectMsg(timeout.duration, PostcardDelivered("pluto", "pippo", "bau bau"))
     }
   }
 
   it should "be able to register saga" in {
-    _tenant = "t5"
-    ignoreNoMsg()
-    withEventBus { busRef =>
-      busRef ! RegisterSaga[PriorityActivitiesSaga]()
-      expectMsgPF(timeout.duration) {
+    _tenant = "t6"
+
+    val probe = TestProbe()
+    probe.ignoreMsg {
+      case _ : DomainEventsSubscribed => false
+      case _ => true
+    }
+    withEventBus(probe.ref) { busRef =>
+      probe.send(busRef, RegisterSaga[PriorityActivitiesSaga]())
+      probe.expectMsgPF(timeout.duration) {
         case DomainEventsSubscribed(events) =>
           events should contain(classOf[PriorityIncreased])
           events should contain(classOf[PriorityDecreased])
@@ -96,33 +138,36 @@ trait EventBusSpec extends AkkaSpec {
   //TODO: test Activate messages
 
   it should "be able to execute saga workflow" in {
-    _tenant = "t6"
-    withEventBus(Seq(classOf[WeightChanged])) { busRef =>
-      ignoreMsg {
-        case _ : HandlersRegistered => false
-        case _ : DomainEventsSubscribed => false
-        case _ : WeightChanged => false
-        case _ => true
-      }
+    _tenant = "t7"
 
-      busRef ! RegisterHandlers[PriorityAggregate]
-      expectMsgType[HandlersRegistered](timeout.duration)
+    val probe = TestProbe()
+    probe.ignoreMsg {
+      case _ : HandlersRegistered => false
+      case _ : DomainEventsSubscribed => false
+      case _ : HeavyChanged => false
+      case _ => true
+    }
 
-      busRef ! RegisterHandlers[ColorAggregate]
-      expectMsgType[HandlersRegistered](timeout.duration)
+    withEventBus(probe.ref, Seq(classOf[HeavyChanged])) { busRef =>
 
-      busRef ! RegisterHandlers[ColorPriorityAggregate]
-      expectMsgType[HandlersRegistered](timeout.duration)
+      probe.send(busRef, RegisterHandlers[PriorityAggregate])
+      probe.expectMsgType[HandlersRegistered](timeout.duration)
 
-      busRef ! RegisterSaga[PriorityActivitiesSaga]
-      expectMsgType[DomainEventsSubscribed](timeout.duration)
+      probe.send(busRef, RegisterHandlers[ColorAggregate])
+      probe.expectMsgType[HandlersRegistered](timeout.duration)
 
-      busRef ! CreatePriority("x")
-      busRef ! IncreasePriority("x")
-      busRef ! AssignColor(1, "red")
+      probe.send(busRef,  RegisterHandlers[ColorPriorityAggregate])
+      probe.expectMsgType[HandlersRegistered](timeout.duration)
 
-      expectMsgPF(timeout.duration) {
-        case WeightChanged("red", _) =>
+      probe.send(busRef, RegisterSaga[PriorityActivitiesSaga])
+      probe.expectMsgType[DomainEventsSubscribed](timeout.duration)
+
+      probe.send(busRef, CreatePriority("x"))
+      probe.send(busRef, IncreasePriority("x"))
+      probe.send(busRef, AssignColor(1, "red"))
+
+      probe.expectMsgPF(timeout.duration) {
+        case HeavyChanged("red", _) =>
       }
     }
   }

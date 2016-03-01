@@ -2,8 +2,8 @@ package juju.testkit.infrastructure
 
 import akka.actor._
 import akka.util.Timeout
-import juju.domain.{AggregateRootFactory, AggregateRoot}
-import juju.domain.AggregateRoot.AggregateIdResolution
+import juju.domain.AggregateRoot.{CommandReceived, AggregateIdResolution}
+import juju.domain.{AggregateRoot, AggregateRootFactory}
 import juju.sample.PriorityAggregate
 import juju.sample.PriorityAggregate.{CreatePriority, IncreasePriority, PriorityCreated, PriorityIncreased}
 import juju.testkit.AkkaSpec
@@ -19,8 +19,13 @@ trait OfficeSpec extends AkkaSpec {
   protected def subscribeDomainEvents()
   protected def createOffice[A <: AggregateRoot[_]: AggregateIdResolution : AggregateRootFactory : ClassTag](tenant: String) : ActorRef
 
+
   it should "be able to create the aggregate from the command" in {
     _tenant = "t1"
+    ignoreMsg {
+      case CommandReceived(_) => true
+    }
+
     subscribeDomainEvents()
 
     val officeRef = createOffice[PriorityAggregate](tenant)
@@ -31,6 +36,11 @@ trait OfficeSpec extends AkkaSpec {
 
   it should "be able to route command to existing aggregate" in {
     _tenant = "t2"
+
+    ignoreMsg {
+      case CommandReceived(_) => true
+    }
+
     subscribeDomainEvents()
 
     val officeRef = createOffice[PriorityAggregate](tenant)
