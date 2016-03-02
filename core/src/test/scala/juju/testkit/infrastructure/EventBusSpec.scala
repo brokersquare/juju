@@ -172,14 +172,24 @@ trait EventBusSpec extends AkkaSpec {
     }
   }
 
-  /*
-  //TODO: tests not yet implemented
-  it should "be able supervisor offices" in {
+  it should "be idempotent with register handlers" in {
+    _tenant = "t8"
     assert(false, "not yet implemented")
   }
 
-  it should "be able supervisor routers" in {
+  it should "be idempotent with register sagaß" in {
+    _tenant = "t9"
     assert(false, "not yet implemented")
   }
-  */
+
+    /*
+    //TODO: tests not yet implemented
+    it should "be able supervisor offices" in {
+      assert(false, "not yet implemented")
+    }
+
+    it should "be able supervisor routers" in {
+      assert(false, "not yet implemented")
+    }
+    */
 }

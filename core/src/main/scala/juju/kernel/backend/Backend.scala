@@ -55,14 +55,21 @@ trait Backend extends Actor with ActorLogging with Stash with Node {
         f2 <- registerSagas(bus)
       } yield SystemIsUp(appname)
 
-      (pipe(future) to sender).future.map(up => {
-        context.become(receive)
-        unstashAll()
+      (pipe(future) to sender).future.onComplete {
+        case scala.util.Success(up) =>
+          context.become(receive)
+          unstashAll()
 
-        scheduler = schedulerFactory.create(tenant, backendConfig.role, context)
-        activations.toSet[SendActivation].foreach(scheduler ! _)
-        wakeups.toSet[ScheduleWakeUp].foreach(scheduler ! _)
-      })
+          scheduler = schedulerFactory.create(tenant, backendConfig.role, context)
+          activations.toSet[SendActivation].foreach(scheduler ! _)
+          wakeups.toSet[ScheduleWakeUp].foreach(scheduler ! _)
+
+          log.info(s"Backend $appname bootstrap succeeded")
+
+        case scala.util.Failure(cause) =>
+          log.warning(s"Backend $appname bootstrap failed due to error: $cause")
+      }
+
     case _ => stash()
   }
 

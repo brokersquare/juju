@@ -99,7 +99,7 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
       }
 
     case wakeUp : WakeUp =>
-      log.debug(s"wakeup $wakeUp requested")
+      log.debug(s"sending wakeup $wakeUp requested")
       val wakeUpClass = wakeUp.getClass
       wakeUps.get(wakeUpClass) match {
         case Some(destRefs) => destRefs foreach {
