@@ -126,6 +126,15 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
         _.ask(UpdateHandlers(handlers))
       }
 
+      Future.sequence(futures) onComplete {
+        case scala.util.Success(results) =>
+          s ! HandlersRegistered(handlers.keys)
+          log.debug(s"aggregate $office registered")
+        case scala.util.Failure(failure) =>
+          s ! akka.actor.Status.Failure(RegisterHandlersFailure(msg, failure))
+          log.warning(s"cannot register handlers $msg due to $failure")
+      }
+/*
       Future.sequence(futures).map {
         case results =>
           s ! HandlersRegistered(handlers.keys)
@@ -135,6 +144,7 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
           s ! akka.actor.Status.Failure(RegisterHandlersFailure(msg, failure))
           log.warning(s"cannot register handlers $msg due to $failure")
       }
+*/
 
     case msg : RegisterSaga[s] =>
       val s = sender()
@@ -160,12 +170,11 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
           log.debug(s"wakeup '$wakeUpClass' for '$routerRef' registered")
       }
 
-      routerRef.ask(UpdateHandlers(handlers))(timeout.duration).map {
-        case results =>
+      routerRef.ask(UpdateHandlers(handlers))(timeout.duration) onComplete {
+        case scala.util.Success(results) =>
           routerRef.tell(GetSubscribedDomainEvents, s)
           log.debug(s"saga $routerRef registered")
-      }.onFailure {
-        case failure =>
+        case scala.util.Failure(failure) =>
           s ! akka.actor.Status.Failure(RegisterSagaFailure(msg, failure))
           log.warning(s"cannot register saga $msg due to $failure")
       }
