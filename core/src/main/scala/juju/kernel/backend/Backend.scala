@@ -11,7 +11,7 @@ import juju.infrastructure.AppScheduler.{ScheduleWakeUp, SendActivation}
 import juju.infrastructure._
 import juju.messages.{Activate, SystemIsUp, WakeUp}
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 trait Backend extends Actor with ActorLogging with Stash with Node {
@@ -48,14 +48,19 @@ trait Backend extends Actor with ActorLogging with Stash with Node {
   }
   private var scheduler = ActorRef.noSender
 
+  def retry[T](times: Int)(f: => Future[T])(implicit executor: ExecutionContext): Future[T] =
+    f recoverWith { case _ if times > 0 => retry(times - 1)(f) }
+
   def waitForBoot: Actor.Receive = {
     case Boot =>
-      val future = for {
-        f1 <- registerHandlers(bus)
-        f2 <- registerSagas(bus)
-      } yield SystemIsUp(appname)
+      def bootFuture = for {
+          f1 <- registerHandlers(bus)
+          f2 <- registerSagas(bus)
+        } yield SystemIsUp(appname)
 
-      (pipe(future) to sender).future.onComplete {
+      val retryable = retry(5)(bootFuture)
+
+      (pipe(retryable) to sender).future .onComplete {
         case scala.util.Success(up) =>
           context.become(receive)
           unstashAll()
@@ -68,6 +73,7 @@ trait Backend extends Actor with ActorLogging with Stash with Node {
 
         case scala.util.Failure(cause) =>
           log.warning(s"Backend $appname bootstrap failed due to error: $cause")
+          throw new Error(s"Max number of retry during the backend $appname boot reached")
       }
 
     case _ => stash()
