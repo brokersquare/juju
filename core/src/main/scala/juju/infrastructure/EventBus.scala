@@ -116,7 +116,6 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
 
     case msg : RegisterHandlers[a] =>
       val s = sender()
-      //TODO: check if handler already set to a different ref and if yes error
       val office : ActorRef = Office.office[a](tenant)(msg.officeFactory)
       context.watch(office)
 
@@ -134,17 +133,6 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
           s ! akka.actor.Status.Failure(RegisterHandlersFailure(msg, failure))
           log.warning(s"cannot register handlers $msg due to $failure")
       }
-/*
-      Future.sequence(futures).map {
-        case results =>
-          s ! HandlersRegistered(handlers.keys)
-          log.debug(s"aggregate $office registered")
-      }.onFailure {
-        case failure =>
-          s ! akka.actor.Status.Failure(RegisterHandlersFailure(msg, failure))
-          log.warning(s"cannot register handlers $msg due to $failure")
-      }
-*/
 
     case msg : RegisterSaga[s] =>
       val s = sender()

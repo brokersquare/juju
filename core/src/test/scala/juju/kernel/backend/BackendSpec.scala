@@ -1,19 +1,6 @@
 package juju.juju.kernel.backend
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import akka.testkit.TestProbe
-import juju.domain.AggregateRoot.AggregateIdResolution
-import juju.domain.{AggregateRoot, AggregateRootFactory}
-import juju.infrastructure.local.LocalNode
-import juju.infrastructure.{OfficeFactory, UpdateHandlers}
-import juju.kernel.backend.{Backend, DefaultBackendConfig}
-import juju.messages.{Boot, SystemIsUp}
-import juju.sample.{AveragePersonWeightSaga, PersonAggregate}
-import juju.testkit.LocalDomainSpec
 
-import scala.reflect.ClassTag
-
-/*
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
 import juju.domain.AggregateRoot.AggregateIdResolution
@@ -29,7 +16,6 @@ import juju.testkit.LocalDomainSpec
 
 import scala.reflect.ClassTag
 
- */
 
 
 abstract class BaseBackend(_appname: String) extends Backend with LocalNode with DefaultBackendConfig {
@@ -38,7 +24,7 @@ abstract class BaseBackend(_appname: String) extends Backend with LocalNode with
 }
 
 class BackendSpec extends LocalDomainSpec("BackendSpec") {
-/*
+
     it should "boot backend when no registration required" in {
       val probe = TestProbe()
       val backend = system.actorOf(Props(new BaseBackend("fakebackend"){
@@ -168,7 +154,7 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
         case akka.actor.Status.Failure(_) =>
       }
     }
-  */
+
 
   it should "retry registration after a failure" in {
     class PersonAggregateExtended extends PersonAggregate {}

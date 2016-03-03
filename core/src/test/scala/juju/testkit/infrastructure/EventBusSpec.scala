@@ -4,16 +4,18 @@ import akka.testkit.TestProbe
 import juju.domain.AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution}
 import juju.domain.resolvers.ByConventions
 import juju.domain.{AggregateRoot, AggregateRootFactory}
-import juju.infrastructure._
+import juju.infrastructure.{HandlersRegistered, RegisterHandlers, _}
 import juju.sample.ColorAggregate.HeavyChanged
-import juju.sample.ColorPriorityAggregate.{ColorAssigned, AssignColor}
+import juju.sample.ColorPriorityAggregate.{AssignColor, ColorAssigned}
 import juju.sample.PersonAggregate.{CreatePerson, PostcardDelivered, SendPostcard}
-import juju.sample.PriorityAggregate._
-import juju.sample._
+import juju.sample.PriorityAggregate.{PriorityCreated, _}
+import juju.sample.{PriorityAggregate, _}
 import juju.testkit.AkkaSpec
 
 import scala.language.existentials
 import scala.reflect.ClassTag
+
+
 
 trait EventBusSpec extends AkkaSpec {
   var _tenant = ""
@@ -174,14 +176,42 @@ trait EventBusSpec extends AkkaSpec {
 
   it should "be idempotent with register handlers" in {
     _tenant = "t8"
-    assert(false, "not yet implemented")
+    val probe = TestProbe()
+    probe.ignoreMsg {
+      case _ : HandlersRegistered => false
+      case _ : PriorityCreated => false
+      case _ => true
+    }
+    withEventBus(probe.ref, Seq(classOf[PriorityCreated])) { busRef =>
+      probe.send(busRef, RegisterHandlers[PriorityAggregate])
+      probe.expectMsgType[HandlersRegistered](timeout.duration)
+
+      probe.send(busRef, RegisterHandlers[PriorityAggregate])
+      probe.expectMsgType[HandlersRegistered](timeout.duration)
+    }
   }
 
   it should "be idempotent with register sagaß" in {
     _tenant = "t9"
-    assert(false, "not yet implemented")
+    val probe = TestProbe()
+    probe.ignoreMsg {
+      case _: DomainEventsSubscribed => false
+      case _ => true
+    }
+    withEventBus(probe.ref) { busRef =>
+      probe.send(busRef, RegisterSaga[PriorityActivitiesSaga]())
+      probe.expectMsgPF(timeout.duration) {
+        case DomainEventsSubscribed(events) =>
+      }
+
+      probe.send(busRef, RegisterSaga[PriorityActivitiesSaga]())
+      probe.expectMsgPF(timeout.duration) {
+        case DomainEventsSubscribed(events) =>
+      }
+    }
   }
 
+//TODO: Add tests to check recovery of office and sagarouter after termination
     /*
     //TODO: tests not yet implemented
     it should "be able supervisor offices" in {
