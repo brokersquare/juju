@@ -54,29 +54,29 @@ trait AkkaSpec extends TestKitBase
   }
 
 
-  protected def withEventBus(action : ActorRef => Unit): Unit = {
-    withEventBus(Seq.empty)(action)
+  protected def withEventBus(subscriber: ActorRef)(action : ActorRef => Unit): Unit = {
+    withEventBus(subscriber, Seq.empty)(action)
   }
 
-  protected def withEventBus(subscribedEvents : Seq[Class[_]])(action : ActorRef => Unit) = {
-    system.eventStream.unsubscribe(this.testActor)
+  protected def withEventBus(subscriber: ActorRef, subscribedEvents : Seq[Class[_]])(action : ActorRef => Unit) = {
+    system.eventStream.unsubscribe(subscriber)
     var router : ActorRef = null
     var busRef: ActorRef = null
 
     subscribedEvents.foreach { ec =>
-      system.eventStream.subscribe(this.testActor, ec)
+      system.eventStream.subscribe(subscriber, ec)
     }
 
     try {
-      router = system.actorOf(DeadLetterRouter.props(this.testActor), EventBus.nameWithTenant(tenant, "DeadLetterRouter"))
+      router = system.actorOf(DeadLetterRouter.props(subscriber), EventBus.nameWithTenant(tenant, "DeadLetterRouter"))
       busRef = system.actorOf(EventBus.props(tenant), EventBus.actorName(tenant))
       action(busRef)
     } finally {
       subscribedEvents.foreach { ec =>
-        system.eventStream.subscribe(this.testActor, ec)
+        system.eventStream.subscribe(subscriber, ec)
       }
 
-      system.eventStream.unsubscribe(this.testActor)
+      system.eventStream.unsubscribe(subscriber)
 
       if (router != null) router ! PoisonPill
       if (busRef != null) busRef ! PoisonPill

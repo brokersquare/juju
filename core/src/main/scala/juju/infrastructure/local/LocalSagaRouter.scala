@@ -81,10 +81,10 @@ class LocalSagaRouter[S <: Saga](tenant: String)(implicit ct: ClassTag[S], handl
       val matchedHandlers = handlers.filter(_._1 == c.getClass)
       matchedHandlers.foreach(_._2 ! c)
       if (matchedHandlers.isEmpty) {akka.actor.Status.Failure(new Exception(s"no handlers for command ${c.getClass}"))} //TODO: manage errors during dispatch (a queue for not sended message? A resend from sender)
+
     case UpdateHandlers(h) =>
       handlers = h
       sender ! akka.actor.Status.Success(h)
-    case _ => ???
   }
 
   private def getOrCreateSaga(correlationId: String): ActorRef = {

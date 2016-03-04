@@ -9,26 +9,26 @@ object Reset {
     lazy val tasks = Seq(
         resetTask
     )
-    
+
     def performReset(folder : File) = {
         val rootFolder = findRoot(folder)
         val files = filesToDelete(rootFolder)
         IO.deleteFilesEmptyDirs(files)
     }
-    
+
     def findRoot(folder: File) : File = {
         val rootFile = new File(folder, "build.sbt")
-        if (rootFile.exists) 
+        if (rootFile.exists)
             folder
         else
             findRoot(new File(folder.getParent()))
     }
-    
-    def filesToDelete(rootFolder: File) : Seq[File] = { 
-        val target: PathFinder = (rootFolder) ** "target*" 
-        val project: PathFinder = (rootFolder) ** "project/project" 
-        val snapshot: PathFinder = (rootFolder) ** "snapshots" 
-        target.get ++ project.get ++ snapshot.get        
+
+    def filesToDelete(rootFolder: File) : Seq[File] = {
+        val native: PathFinder = (rootFolder) ** "native*"
+        val target: PathFinder = (rootFolder) ** "target*"
+        val project: PathFinder = (rootFolder) ** "project" / "project"
+        val snapshot: PathFinder = (rootFolder) ** "snapshots"
+        target.get ++ project.get ++ snapshot.get ++ native.get
     }
-   
 }

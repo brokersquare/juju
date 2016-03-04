@@ -2,13 +2,15 @@ package juju.domain
 
 import java.lang.reflect.Method
 
-import akka.actor.{ActorRef, ActorLogging, Props}
+import akka.actor.{ActorLogging, ActorRef, Props}
 import akka.persistence.PersistentActor
-import juju.messages.{RouteTo, DomainEvent, Command}
+import juju.domain.AggregateRoot.{CommandReceiveFailure, CommandReceived, CommandNotSupported}
+import juju.messages.{Command, DomainEvent, RouteTo}
 
 import scala.annotation.tailrec
-import scala.reflect.ClassTag
 import scala.language.existentials
+import scala.reflect.ClassTag
+import scala.util.Try
 
 class AggregateRootNotInitializedException extends Exception
 
@@ -28,6 +30,10 @@ case class EmptyState() extends AggregateState {
 }
 
 object AggregateRoot {
+  case class CommandReceived(command: Command)
+  case class CommandReceiveFailure(command: Command, cause: Throwable) extends Exception(cause)
+  case class CommandNotSupported(command: Command) extends Exception
+
   trait AggregateIdResolution[A <: AggregateRoot[_]] {
     def resolve(command: Command) : String
   }
@@ -51,17 +57,13 @@ abstract class AggregateRoot[S <: AggregateState]
   type AggregateStateFactory = PartialFunction[DomainEvent, S]
   val factory : AggregateStateFactory
 
-  /*private lazy val handlers = this.getClass.getDeclaredMethods
-    .filter(_.getParameterTypes.length == 1)
-    .filter( _.getName == "handle")
-    .filter(_.getParameterTypes.head != classOf[Command])
-*/
   private lazy val handlers = getMethods("handle", classOf[Command])
 
   def handle : Receive = {
     case cmd: Command if isCommandSupported(cmd) =>
       val handler = handlers.filter(_.getParameterTypes.head == cmd.getClass).head
       handler.invoke(this, cmd)
+    case cmd: Command if !isCommandSupported(cmd) =>throw CommandNotSupported(cmd)
   }
 
   private def isCommandSupported(command: Command): Boolean =
@@ -109,10 +111,17 @@ abstract class AggregateRoot[S <: AggregateState]
     }
   }
 
-
   override def receiveCommand: Receive = {
     case cmd: Command =>
-      handle(cmd)
+      val s = sender()
+      Try {
+        handle(cmd)
+      } match {
+        case scala.util.Success(r) =>
+          s ! akka.actor.Status.Success(CommandReceived(cmd))
+        case scala.util.Failure(e) =>
+          s ! akka.actor.Status.Failure(CommandReceiveFailure(cmd, e))
+      }
 
     case m: RouteTo =>
       aggregateSenderClass = Some(m.senderClass.asInstanceOf[Class[AggregateRoot[_]]])
@@ -130,9 +139,8 @@ abstract class AggregateRoot[S <: AggregateState]
   private var aggregateSenderId: Option[String] = None
   protected def aggregateSender() = (aggregateSenderClass.get, aggregateSenderId.get)
 
-  protected def handleAggregateMessage : Receive = {
-    case _ => ???
-  }
+  protected def handleAggregateMessage : Receive = {case _ => ???}
+
 
   protected def deliveryMessageToAggregate[A <: AggregateRoot[_] : ClassTag](aggregateId: String, message: Any, router: ActorRef = sender()): Unit = {
     val senderClass = this.getClass.asInstanceOf[Class[_ <: AggregateRoot[_]]]

@@ -3,7 +3,7 @@ package juju.domain
 import akka.actor._
 import akka.pattern.gracefulStop
 import juju.sample.AveragePersonWeightSaga.{PublishAverageWeight, PublishWakeUp}
-import juju.sample.ColorAggregate.ChangeWeight
+import juju.sample.ColorAggregate.ChangeHeavy
 import juju.sample.ColorPriorityAggregate.ColorAssigned
 import juju.sample.PersonAggregate.WeightChanged
 import juju.sample.{AveragePersonWeightSaga, PriorityActivitiesSaga}
@@ -32,14 +32,14 @@ class SagaSpec extends LocalDomainSpec("Saga") {
     val sagaRef = system.actorOf(Props(classOf[PriorityActivitiesSaga], 3, this.testActor), s"fakesaga-3")
     sagaRef ! PriorityIncreased("x", 3)
     sagaRef ! ColorAssigned(3, "red")
-    expectMsg(3 seconds, ChangeWeight("red", 1))
+    expectMsg(3 seconds, ChangeHeavy("red", 1))
   }
 
   it should "not delivery commands during events replay" in {
     val sagaRef = system.actorOf(Props(classOf[PriorityActivitiesSaga], 3, this.testActor), s"fakesaga-4")
     sagaRef ! PriorityIncreased("x", 3)
     sagaRef ! ColorAssigned(3, "red")
-    expectMsg(3 seconds, ChangeWeight("red", 1))
+    expectMsg(3 seconds, ChangeHeavy("red", 1))
     val future = gracefulStop(sagaRef, 2 seconds)
     Await.ready(future, 10 seconds)
 

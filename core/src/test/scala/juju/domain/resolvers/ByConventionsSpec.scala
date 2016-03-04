@@ -1,7 +1,7 @@
 package juju.domain.resolvers
 
 import akka.actor.ActorRef
-import juju.domain.AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution}
+import juju.domain.AggregateRoot.{CommandReceiveFailure, CommandReceived, AggregateHandlersResolution, AggregateIdResolution}
 import juju.domain._
 import juju.domain.resolvers.ByConventionsSpec._
 import juju.messages.Activate
@@ -14,6 +14,14 @@ import juju.testkit.LocalDomainSpec
 import scala.reflect.ClassTag
 
 class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
+  override def beforeAll() = {
+    ignoreMsg {
+      case akka.actor.Status.Failure(CommandReceiveFailure(_, _)) => true
+      case akka.actor.Status.Success(CommandReceived(_)) => true
+      case CommandReceiveFailure(_, _) => true
+      case CommandReceived(_) => true
+    }
+  }
 
   it should "retrieves commands supported by the aggregate" in {
     val supportedCommands = ByConventions.aggregateHandlersResolution[PersonAggregate]().resolve()
