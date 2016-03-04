@@ -3,6 +3,7 @@ import sbt._
 object Versions {
   val Juju = "0.1.0-SNAPSHOT"
   val KafkaPersistence  = "7b35f752a9"
+  //val Kafka             = "0.8.2"
   val Scala             = "2.11.7"
   val Akka              = "2.4.1"
   val AkkaHttp          = "2.0.3"
@@ -11,6 +12,9 @@ object Versions {
   val ScalaTest         = "2.2.4"
   val ReactiveX         = "0.25.1"
   val SprayJson         = "1.3.2"
+
+  val CommonIO          = "2.4"
+  val Curator           = "2.7.1"
 }
 
 object Dependencies {
@@ -28,6 +32,7 @@ object Dependencies {
     val akkaContrib = "com.typesafe.akka" %% "akka-contrib" % Akka
 
     val kafkaPersistence  = "com.github.brokersquare" %% "akka-persistence-kafka" % KafkaPersistence excludeAll(ExclusionRule("org.slf4j", "slf4j-simple"),ExclusionRule("org.slf4j", "slf4j-log4j12"))
+    //val kafka = "org.apache.kafka" %% "kafka" % Kafka % "test"
 
     val akkaHttpCore = "com.typesafe.akka" %% "akka-http-core-experimental" % AkkaHttp
     val akkaHttp = "com.typesafe.akka" %% "akka-http-experimental" % AkkaHttp
@@ -37,10 +42,14 @@ object Dependencies {
     val scalaReflect = "org.scala-lang" % "scala-reflect" % Scala intransitive()
     val scalaTest = "org.scalatest" %% "scalatest" % ScalaTest % "test"
     val akkaTestkit = "com.typesafe.akka" %% "akka-testkit" % Akka % "test"
+
+    val commonIO = "commons-io" % "commons-io"  % CommonIO % "test"
+    val curator = "org.apache.curator" % "curator-test" % Curator % "test"
   }
+
   import Compile._
   val core = Seq(scalaReflect, akkaActor, slf4jSimple, akkaPersistence, scalaLogging, reactivex, akkaTestkit, scalaTest)
   val jujuCluster = Seq(akkaRemote, akkaCluster, akkaClusterSharding, akkaClusteTools, akkaContrib)
   val jujuHttp = Seq(akkaHttp, akkaHttpCore, akkaHttpJson, akkaHttpTestKit, reactivex)
-  val jujuKafka = Seq(kafkaPersistence)
+  val jujuKafka = Seq(kafkaPersistence, commonIO, curator/*, kafka*/)
 }

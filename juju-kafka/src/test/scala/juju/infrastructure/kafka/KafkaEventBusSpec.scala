@@ -1,8 +1,8 @@
 package juju.infrastructure.kafka
 
-import juju.testkit.LocalDomainSpec
+import juju.testkit.KafkaDomainSpec
 import juju.testkit.infrastructure.EventBusSpec
 
 
-class KafkaEventBusSpec extends LocalDomainSpec("KafkaEventBus") with EventBusSpec {
+class KafkaEventBusSpec extends KafkaDomainSpec("KafkaEventBus", 2281) with EventBusSpec {
 }
