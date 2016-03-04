@@ -174,7 +174,7 @@ trait EventBusSpec extends AkkaSpec {
     }
   }
 
-  it should "be idempotent with register handlers" in {
+  it should "be idempotent when register handlers" in {
     _tenant = "t8"
     val probe = TestProbe()
     probe.ignoreMsg {
@@ -191,7 +191,7 @@ trait EventBusSpec extends AkkaSpec {
     }
   }
 
-  it should "be idempotent with register sagaß" in {
+  it should "be idempotent when register saga" in {
     _tenant = "t9"
     val probe = TestProbe()
     probe.ignoreMsg {

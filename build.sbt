@@ -25,3 +25,8 @@ lazy val jujuHttp = Project(id="juju-http",base=file("juju-http"))
   .settings(defaultSettings: _*)
   .settings(libraryDependencies ++= Dependencies.jujuHttp)
   .dependsOn(core % "compile->compile;test->test")
+
+lazy val jujuKafka = Project(id="juju-kafka",base=file("juju-kafka"))
+  .settings(defaultSettings: _*)
+  .settings(libraryDependencies ++= Dependencies.jujuKafka)
+  .dependsOn(core % "compile->compile;test->test")
