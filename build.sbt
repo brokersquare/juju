@@ -7,6 +7,7 @@ lazy val defaultSettings =
         scalaVersion := Versions.Scala,
         scalacOptions:= Seq("-language:postfixOps", "-feature", "-deprecation", "-language:implicitConversions"),
         resolvers ++= Seq(
+          "jitpack" at "https://jitpack.io",
           "spray repo" at "http://repo.spray.io",
           "jdgoldie at bintray" at "http://dl.bintray.com/jdgoldie/maven"
         )
