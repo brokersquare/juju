@@ -12,7 +12,7 @@ lazy val defaultSettings =
           "jdgoldie at bintray" at "http://dl.bintray.com/jdgoldie/maven"
         )
       )
-
+ 
 lazy val core = Project(id="juju-core", base=file("core"))
   .settings(defaultSettings: _*)
   .settings(libraryDependencies ++= Dependencies.core)
@@ -30,4 +30,10 @@ lazy val jujuHttp = Project(id="juju-http", base=file("juju-http"))
 lazy val jujuKafka = Project(id="juju-kafka", base=file("juju-kafka"))
   .settings(defaultSettings: _*)
   .settings(libraryDependencies ++= Dependencies.jujuKafka)
+  .dependsOn(core % "compile->compile;test->test")
+
+lazy val jujuMetrics = Project(id="juju-metrics", base=file("juju-metrics"))
+  .settings(defaultSettings: _*)
+  .settings(libraryDependencies ++= Dependencies.jujuMetrics)
+  .settings(Assembly.settings: _*)
   .dependsOn(core % "compile->compile;test->test")
