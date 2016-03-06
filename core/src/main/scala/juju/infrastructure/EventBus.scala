@@ -85,13 +85,13 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
       activates.get(activate.getClass) match {
         case Some(destRef) =>
           val s = sender()
-          destRef.ask(activate, self)(timeout.duration)
+          destRef.ask(activate)(timeout.duration, self)
             .map {case _ =>
               s ! akka.actor.Status.Success(activate)
               log.debug(s"activate $activate sent to $destRef")
             }
             .onFailure {case f =>
-              s ! akka.actor.Status.Success(ActivationSendFailure(activate,f))
+              s ! akka.actor.Status.Failure(ActivationSendFailure(activate,f))
               log.warning(s"cannot send $activate to $destRef due to $f")
             }
 
@@ -104,7 +104,7 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
       wakeUps.get(wakeUpClass) match {
         case Some(destRefs) => destRefs foreach {
           ref => {
-            ref.ask(wakeUp, self)(timeout.duration) //TODO: manage failures and return an aggregated result
+            ref.ask(wakeUp)(timeout.duration, self) //TODO: manage failures and return an aggregated result
               .map {case _ => log.debug(s"wakeup $wakeUp sent to $ref")}
               .onFailure {case f => log.warning(s"cannot send $wakeUp to $ref due to $f")}
             }

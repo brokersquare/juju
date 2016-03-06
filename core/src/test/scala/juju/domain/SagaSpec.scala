@@ -2,7 +2,7 @@ package juju.domain
 
 import akka.actor._
 import akka.pattern.gracefulStop
-import juju.sample.AveragePersonWeightSaga.{PublishAverageWeight, PublishWakeUp}
+import juju.sample.{PublishAverageWeight, PublishWakeUp}
 import juju.sample.ColorAggregate.ChangeHeavy
 import juju.sample.ColorPriorityAggregate.ColorAssigned
 import juju.sample.PersonAggregate.WeightChanged

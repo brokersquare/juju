@@ -62,8 +62,10 @@ class LocalSagaRouter[S <: Saga](tenant: String)(implicit ct: ClassTag[S], handl
   override def receive: Receive = {
     case e@GetSubscribedDomainEvents => sender ! DomainEventsSubscribed(subscribedEvents)
     case e : Activate =>
+      val s = sender()
       log.debug(s"received activate $e message")
       getOrCreateSaga(e.correlationId)
+      s ! akka.actor.Status.Success(e)
     case e : WakeUp =>
       context.children foreach { child =>
         log.debug(s"routing wake up event $e to $child")
