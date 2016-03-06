@@ -12,7 +12,7 @@ lazy val defaultSettings =
           "jdgoldie at bintray" at "http://dl.bintray.com/jdgoldie/maven"
         )
       )
-
+ 
 lazy val core = Project(id="juju-core", base=file("core"))
   .settings(defaultSettings: _*)
   .settings(libraryDependencies ++= Dependencies.core)
