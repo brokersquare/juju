@@ -2,19 +2,19 @@ package juju.testkit.infrastructure
 
 import akka.testkit.TestProbe
 import juju.domain.AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution}
+import juju.domain.Saga.{SagaCorrelationIdResolution, SagaHandlersResolution}
 import juju.domain.resolvers.ByConventions
-import juju.domain.{AggregateRoot, AggregateRootFactory}
+import juju.domain.{AggregateRoot, AggregateRootFactory, Saga, SagaFactory}
 import juju.infrastructure.{HandlersRegistered, RegisterHandlers, _}
 import juju.sample.ColorAggregate.HeavyChanged
 import juju.sample.ColorPriorityAggregate.{AssignColor, ColorAssigned}
 import juju.sample.PersonAggregate.{CreatePerson, PostcardDelivered, SendPostcard}
 import juju.sample.PriorityAggregate.{PriorityCreated, _}
-import juju.sample.{PriorityAggregate, _}
+import juju.sample.{AveragePersonWeightActivate, PriorityAggregate, _}
 import juju.testkit.AkkaSpec
 
 import scala.language.existentials
 import scala.reflect.ClassTag
-
 
 
 trait EventBusSpec extends AkkaSpec {
@@ -137,8 +137,6 @@ trait EventBusSpec extends AkkaSpec {
     }
   }
 
-  //TODO: test Activate messages
-
   it should "be able to execute saga workflow" in {
     _tenant = "t7"
 
@@ -211,15 +209,51 @@ trait EventBusSpec extends AkkaSpec {
     }
   }
 
-//TODO: Add tests to check recovery of office and sagarouter after termination
-    /*
-    //TODO: tests not yet implemented
-    it should "be able supervisor offices" in {
-      assert(false, "not yet implemented")
-    }
+  it should "receive an Ack after activate a saga" in {
+    _tenant = "t10"
 
-    it should "be able supervisor routers" in {
-      assert(false, "not yet implemented")
+    implicit def sagaFactory[S <: Saga : ClassTag]: SagaFactory[S] = ByConventions.sagaFactory[S]()
+    implicit def sagaHandlersResolution[S <: Saga : ClassTag]: SagaHandlersResolution[S] = ByConventions.sagaHandlersResolution[S]()
+    implicit def correlationIdResolution[S <: Saga : ClassTag]: SagaCorrelationIdResolution[S] = ByConventions.correlationIdResolution[S]()
+
+    val probe = TestProbe()
+    withEventBus(probe.ref) { busRef =>
+      probe.send(busRef, RegisterSaga[AveragePersonWeightSaga]())
+      probe.expectMsgPF(timeout.duration) {
+        case DomainEventsSubscribed(events) =>
+      }
+      probe.send(busRef, AveragePersonWeightActivate("fake"))
+      probe.expectMsg(timeout.duration, akka.actor.Status.Success(AveragePersonWeightActivate("fake")))
     }
-    */
+  }
+
+  it should "receive an Ack after wakeup a saga" in {
+    _tenant = "t11"
+
+    implicit def sagaFactory[S <: Saga : ClassTag]: SagaFactory[S] = ByConventions.sagaFactory[S]()
+    implicit def sagaHandlersResolution[S <: Saga : ClassTag]: SagaHandlersResolution[S] = ByConventions.sagaHandlersResolution[S]()
+    implicit def correlationIdResolution[S <: Saga : ClassTag]: SagaCorrelationIdResolution[S] = ByConventions.correlationIdResolution[S]()
+
+    val probe = TestProbe()
+    withEventBus(probe.ref) { busRef =>
+      probe.send(busRef, RegisterSaga[AveragePersonWeightSaga]())
+      probe.expectMsgPF(timeout.duration) {
+        case DomainEventsSubscribed(events) =>
+      }
+      probe.send(busRef, PublishWakeUp())
+      probe.expectMsg(akka.actor.Status.Success(PublishWakeUp()))
+    }
+  }
+
+  //TODO: Add tests to check recovery of office and sagarouter after termination
+  /*
+  //TODO: tests not yet implemented
+  it should "be able supervisor offices" in {
+    assert(false, "not yet implemented")
+  }
+
+  it should "be able supervisor routers" in {
+    assert(false, "not yet implemented")
+  }
+  */
 }

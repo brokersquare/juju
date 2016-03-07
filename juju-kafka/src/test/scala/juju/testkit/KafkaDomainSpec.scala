@@ -9,6 +9,8 @@ import juju.infrastructure.local.LocalNode
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfterAll
 
+import scala.util.Try
+
 object KafkaDomainSpec {
   def getLocalConnectString(port: Int) = "\"localhost:\"" + port
 
@@ -36,8 +38,15 @@ abstract class KafkaDomainSpec (test: String, zookeeperPort: Int, _config: Confi
   behavior of test      //this will print the behavior of the test
 
   override def afterAll(): Unit = {
-    FileUtils.deleteDirectory(new File("target/test"))
-    FileUtils.deleteDirectory(new File(s"target/test/$test/zookeeper"))
-    FileUtils.deleteDirectory(new File(s"target/test/$test/kafka"))
+      val folders = Seq(s"target/test/$test/zookeeper", s"target/test/$test/kafka", "target/test")
+
+      folders map (new File(_)) foreach { f =>
+        Try(FileUtils.deleteDirectory(f)) match {
+          case scala.util.Success(_) =>
+            logger.debug(s"deleted file ${f.getName}")
+          case scala.util.Failure(cause) =>
+            logger.warn(s"cannot delete ${f.getName} due to $cause")
+        }
+      }
   }
 }

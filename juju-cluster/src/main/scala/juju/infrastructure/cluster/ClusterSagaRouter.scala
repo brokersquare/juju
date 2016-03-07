@@ -143,7 +143,7 @@ class ClusterSagaProxy[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorre
 class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String) extends Actor with ActorLogging with Stash {
   import ClusterSagaRouter._
   import EventBus._
-  import akka.pattern.{ask, pipe}
+  import akka.pattern.ask
 
   private val system = context.system
   implicit val ec = system.dispatcher
@@ -200,7 +200,10 @@ class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorr
       mediator ! Publish(topic, wakeup)
     case activate : Activate =>
       val s = sender()
-      gatewayRegion.ask(activate)(timeout.duration).pipeTo(s)
+      gatewayRegion.ask(activate)(timeout.duration).onComplete {
+        case scala.util.Success(_) => s ! akka.actor.Status.Success(activate)
+        case scala.util.Failure(cause) => s ! akka.actor.Status.Failure(cause)
+      }
 
     case _ =>
   }

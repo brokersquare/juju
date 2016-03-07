@@ -99,16 +99,24 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
       }
 
     case wakeUp : WakeUp =>
+      val s = sender()
       log.debug(s"sending wakeup $wakeUp requested")
       val wakeUpClass = wakeUp.getClass
       wakeUps.get(wakeUpClass) match {
-        case Some(destRefs) => destRefs foreach {
-          ref => {
-            ref.ask(wakeUp)(timeout.duration, self) //TODO: manage failures and return an aggregated result
-              .map {case _ => log.debug(s"wakeup $wakeUp sent to $ref")}
-              .onFailure {case f => log.warning(s"cannot send $wakeUp to $ref due to $f")}
-            }
-        }
+        case Some(destRefs) =>
+          val futures = context.children map { d =>
+            log.debug(s"sending wake up event $wakeUp to $d")
+            d.ask(wakeUp)(timeout.duration, s)
+          }
+
+          Future.sequence(futures) onComplete {
+            case scala.util.Success(results) =>
+              s ! akka.actor.Status.Success(wakeUp)
+              log.debug(s"wakeup $wakeUp routed")
+            case scala.util.Failure(failure) =>
+              s ! akka.actor.Status.Failure(new Exception(s"Failure during wakeup $wakeUp routing", failure))
+              log.warning(s"cannot route wakeup $wakeUp due to $failure")
+          }
         case None =>
       }
 

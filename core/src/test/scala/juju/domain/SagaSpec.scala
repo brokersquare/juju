@@ -2,12 +2,11 @@ package juju.domain
 
 import akka.actor._
 import akka.pattern.gracefulStop
-import juju.sample.{PublishAverageWeight, PublishWakeUp}
 import juju.sample.ColorAggregate.ChangeHeavy
 import juju.sample.ColorPriorityAggregate.ColorAssigned
 import juju.sample.PersonAggregate.WeightChanged
-import juju.sample.{AveragePersonWeightSaga, PriorityActivitiesSaga}
 import juju.sample.PriorityAggregate.PriorityIncreased
+import juju.sample.{AveragePersonWeightSaga, PriorityActivitiesSaga, PublishAverageWeight, PublishWakeUp}
 import juju.testkit.LocalDomainSpec
 
 import scala.concurrent.Await

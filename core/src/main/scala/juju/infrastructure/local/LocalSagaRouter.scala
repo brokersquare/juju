@@ -48,6 +48,11 @@ object LocalSagaRouter {
 
 class LocalSagaRouter[S <: Saga](tenant: String)(implicit ct: ClassTag[S], handlersResolution: SagaHandlersResolution[S], idResolver : SagaCorrelationIdResolution[S], sagaFactory : SagaFactory[S])
   extends Actor with ActorLogging {
+  import akka.pattern.ask
+
+  private val system = context.system
+  implicit val ec = system.dispatcher
+  implicit val timeout = Timeout(context.system.settings.config.getDuration("juju.eventbus.timeout", TimeUnit.SECONDS), TimeUnit.SECONDS)
 
   val sagaName = implicitly[ClassTag[S]].runtimeClass.getSimpleName //TODO: take it from the sagaRouterFactory
   var handlers = Map[Class[_ <: Command], ActorRef]()
@@ -66,11 +71,23 @@ class LocalSagaRouter[S <: Saga](tenant: String)(implicit ct: ClassTag[S], handl
       log.debug(s"received activate $e message")
       getOrCreateSaga(e.correlationId)
       s ! akka.actor.Status.Success(e)
+
     case e : WakeUp =>
-      context.children foreach { child =>
+      val s = sender()
+      val futures = context.children map { child =>
         log.debug(s"routing wake up event $e to $child")
-        child ! e
+        child.ask(e)(timeout.duration, s)
       }
+
+      Future.sequence(futures) onComplete {
+        case scala.util.Success(results) =>
+          s ! akka.actor.Status.Success(e)
+          log.debug(s"wakeup $e routed")
+        case scala.util.Failure(failure) =>
+          s ! akka.actor.Status.Failure(new Exception(s"Failure during wakeup $e routing", failure))
+          log.warning(s"cannot route wakeup $e due to $failure")
+      }
+
     case e : DomainEvent =>
       idResolver resolve e match {
         case Some(correlationId) =>
@@ -79,6 +96,7 @@ class LocalSagaRouter[S <: Saga](tenant: String)(implicit ct: ClassTag[S], handl
           sagaRef ! e
         case None =>
       }
+
     case c : Command =>
       val matchedHandlers = handlers.filter(_._1 == c.getClass)
       matchedHandlers.foreach(_._2 ! c)

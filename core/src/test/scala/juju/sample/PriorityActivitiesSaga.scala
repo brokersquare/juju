@@ -51,7 +51,6 @@ class PriorityActivitiesSaga(val priority: Int, commandRouter: ActorRef) extends
       deliveryChangeWeightIfNeeded(activities)
     }
     case ColorAssigned(p, c) => {
-      deliveryChangeWeightIfNeeded(0)
       color = c
       deliveryChangeWeightIfNeeded(activities)
     }
