@@ -249,14 +249,15 @@ trait EventBusSpec extends AkkaSpec {
   }
 
   //TODO: Add tests to check recovery of office and sagarouter after termination
-  /*
-  //TODO: tests not yet implemented
+
   it should "be able supervisor offices" in {
+    pending
     assert(false, "not yet implemented")
   }
 
   it should "be able supervisor routers" in {
+    pending
     assert(false, "not yet implemented")
   }
-  */
+
 }
