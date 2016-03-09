@@ -79,7 +79,7 @@ trait AkkaSpec extends TestKitBase
       system.eventStream.unsubscribe(subscriber)
 
       if (router != null) router ! PoisonPill
-      if (busRef != null) busRef ! PoisonPill
+      if (busRef != null) busRef ! juju.messages.ShutdownActor
     }
   }
 }

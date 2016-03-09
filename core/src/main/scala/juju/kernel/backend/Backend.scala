@@ -82,12 +82,22 @@ trait Backend extends Actor with ActorLogging with Stash with Node {
   context.become(waitForBoot)
 
   override def receive: Receive = {
+    case juju.messages.ShutdownActor =>
+      bus ! juju.messages.ShutdownActor
+      context.become(shutdownInProgress)
+      log.info(s"$appname receive shutdown request")
     case m @ _ =>
-      log.debug(s"$appname receive message $m")
+      log.warning(s"$appname receive message $m")
   }
 
-  override def postStop() : Unit =  {
-    bus ! PoisonPill
+  def shutdownInProgress: Receive = {
+    case juju.messages.ShutdownActorCompleted(`bus`) =>
+      bus ! juju.messages.ShutdownActor
+      context.stop(self)
+      log.debug(s"$appname stopped bus. Closing in progress...")
+
+    case m @ _ =>
+      log.warning(s"$appname receive message $m during shutdown")
   }
 
   private def registerHandlers(bus: ActorRef): Future[Seq[HandlersRegistered]] = {

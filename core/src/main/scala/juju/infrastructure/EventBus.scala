@@ -50,8 +50,12 @@ case object GetSubscribedDomainEvents extends InfrastructureMessage
 case class DomainEventsSubscribed(events: Iterable[Class[_ <: DomainEvent]]) extends InfrastructureMessage
 
 class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
-  var activates = Map[Class[_ <: Activate], ActorRef]()
+  var registerMessages: Map[ActorRef, InfrastructureMessage] = Map.empty
+  var booting: Seq[ActorRef] = Seq.empty
+
   var handlers = Map[Class[_ <: Command], ActorRef]()
+  var routers = Map[Class[_ <: DomainEvent], ActorRef]()
+  var activates = Map[Class[_ <: Activate], ActorRef]()
   var wakeUps = Map[Class[_ <: WakeUp], Seq[ActorRef]]()
   implicit val timeout = Timeout(context.system.settings.config.getDuration("juju.eventbus.timeout", TimeUnit.SECONDS), TimeUnit.SECONDS)
   implicit val executeContext = context.dispatcher
@@ -59,7 +63,6 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
   log.debug("EventBus is up and running")
 
   override def receive: Receive = {
-
     case command : Command =>
       log.debug(s"eventbus command $command received")
 
@@ -123,21 +126,40 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
     case event : DomainEvent => sender ! Failure(new MessageNotSupported(s"event bus cannot handle event $event"))
 
     case msg : RegisterHandlers[a] =>
+      context.become(registering)
+      self.forward(msg)
+
+    case msg : RegisterSaga[s] =>
+      context.become(registering)
+      self.forward(msg)
+
+    /*
+    case msg : RegisterHandlers[a] =>
       val s = sender()
       val office : ActorRef = Office.office[a](tenant)(msg.officeFactory)
       context.watch(office)
+      registerMessages += office -> msg
+      booting = booting :+ office
 
-      val pairs = msg.resolver.resolve().map(c => c -> office)
-      handlers = List(handlers.toList, pairs.toList).flatten.toMap
+      val allExceptCurrent = msg.resolver.resolve().filterNot(c=>routers.keys.exists(_ == c))
+      handlers = allExceptCurrent.map {_ -> office}.toMap
+
       val futures = handlers.values map {
         _.ask(UpdateHandlers(handlers))
       }
 
       Future.sequence(futures) onComplete {
         case scala.util.Success(results) =>
+          booting = booting.filterNot(_ == office)
           s ! HandlersRegistered(handlers.keys)
           log.debug(s"aggregate $office registered")
+
         case scala.util.Failure(failure) =>
+          booting = booting.filterNot(_ == office)
+          registerMessages -= office
+          context.unwatch(office)
+          handlers = handlers.filterNot(_._2 == office).toMap
+
           s ! akka.actor.Status.Failure(RegisterHandlersFailure(msg, failure))
           log.warning(s"cannot register handlers $msg due to $failure")
       }
@@ -145,41 +167,180 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
     case msg : RegisterSaga[s] =>
       val s = sender()
 
-      val routerRef = SagaRouter.router[s](tenant)(msg.routerFactory)
-      context.watch(routerRef)
+      val router = SagaRouter.router[s](tenant)(msg.routerFactory)
+      context.watch(router)
+      registerMessages += router -> msg
+      booting = booting :+ router
+
+      val allExceptCurrent = msg.resolver.resolve().filterNot(c=>routers.keys.exists(_ == c))
+      routers = allExceptCurrent.map {_ -> router}.toMap
 
       msg.resolver.activateBy() match {
         case Some(m) =>
           val activateClass = m.asInstanceOf[Class[_ <: Activate]]
-          val pair = activateClass -> routerRef
+          val pair = activateClass -> router
           activates = activates - activateClass + pair
-          log.debug(s"activator '$activateClass' for '$routerRef' registered")
+          log.debug(s"activator '$activateClass' for '$router' registered")
         case None =>
       }
 
       val wakeUpMessages = msg.resolver.wakeUpBy()
       wakeUpMessages foreach { m =>
           val wakeUpClass = m.asInstanceOf[Class[_ <: WakeUp]]
-          val seq : Seq[ActorRef] = wakeUps.getOrElse[Seq[ActorRef]](wakeUpClass, Seq.empty).filterNot(r => r == routerRef) :+ routerRef
+          val seq : Seq[ActorRef] = wakeUps.getOrElse[Seq[ActorRef]](wakeUpClass, Seq.empty).filterNot(r => r == router) :+ router
           val pair = wakeUpClass -> seq
           wakeUps = wakeUps - wakeUpClass + pair
-          log.debug(s"wakeup '$wakeUpClass' for '$routerRef' registered")
+          log.debug(s"wakeup '$wakeUpClass' for '$router' registered")
       }
 
-      routerRef.ask(UpdateHandlers(handlers))(timeout.duration) onComplete {
+      router.ask(UpdateHandlers(handlers))(timeout.duration) onComplete {
         case scala.util.Success(results) =>
-          routerRef.tell(GetSubscribedDomainEvents, s)
-          log.debug(s"saga $routerRef registered")
+          booting = booting.filterNot(_ == router)
+          router.tell(GetSubscribedDomainEvents, s)
+          log.debug(s"saga $router registered")
+
         case scala.util.Failure(failure) =>
+          registerMessages -= router
+          booting = booting.filterNot(_ == router)
+          context.unwatch(router)
+          routers = routers.filterNot(_._2 == router).toMap
+          wakeUps = wakeUps.filterNot(_._2 == router).toMap
+          activates = activates.filterNot(_._2 == router).toMap
+
           s ! akka.actor.Status.Failure(RegisterSagaFailure(msg, failure))
           log.warning(s"cannot register saga $msg due to $failure")
       }
+*/
+    case ShutdownActor =>
+      shutdownRequestedBy = sender()
+      if (registerMessages.isEmpty) {
+        context.stop(self)
+        shutdownRequestedBy ! ShutdownActorCompleted(self)
+      } else {
+        context.become(shutdownInProgress)
+      }
 
-    case t: Terminated =>
-      log.warning(s"received Terminated $t from ${sender()}. How I can manage this?!?!?!")
+    case Terminated(actor) =>
+      registerMessages find(_._1 == actor) match {
+        case Some((_, register)) if !booting.contains(actor) =>
+          self ! register
+          log.warning(s"received Terminated from $actor. going to restart...")
+
+        case None =>
+          log.warning(s"received Terminated from $actor but not actor registered found")
+
+        case _ =>
+      }
 
     case msg@_ =>
       val errorText = s"EventBus received unexpected message $msg"
       sender ! Failure(new MessageNotSupported(errorText))
+  }
+
+  def registering: Receive = {
+    case msg : RegisterHandlers[a] =>
+      val s = sender()
+      val office : ActorRef = Office.office[a](tenant)(msg.officeFactory)
+      context.watch(office)
+      registerMessages += office -> msg
+      booting = booting :+ office
+
+      msg.resolver.resolve().map {_ -> office}.foreach(handlers += _)
+
+      val futures = handlers.values map {
+        _.ask(UpdateHandlers(handlers))
+      }
+
+      Future.sequence(futures) onComplete {
+        case scala.util.Success(results) =>
+          booting = booting.filterNot(_ == office)
+          s ! HandlersRegistered(handlers.keys)
+          log.debug(s"aggregate $office registered")
+          context.unbecome()
+          unstashAll()
+
+        case scala.util.Failure(failure) =>
+          booting = booting.filterNot(_ == office)
+          registerMessages -= office
+          context.unwatch(office)
+          handlers = handlers.filterNot(_._2 == office).toMap
+
+          s ! akka.actor.Status.Failure(RegisterHandlersFailure(msg, failure))
+          log.warning(s"cannot register handlers $msg due to $failure")
+
+          context.unbecome()
+          unstashAll()
+      }
+
+    case msg : RegisterSaga[s] =>
+      val s = sender()
+
+      val router = SagaRouter.router[s](tenant)(msg.routerFactory)
+      context.watch(router)
+      registerMessages += router -> msg
+      booting = booting :+ router
+
+      msg.resolver.resolve().map {_ -> router}.foreach(routers += _)
+
+      msg.resolver.activateBy() match {
+        case Some(m) =>
+          val activateClass = m.asInstanceOf[Class[_ <: Activate]]
+          val pair = activateClass -> router
+          activates = activates - activateClass + pair
+          log.debug(s"activator '$activateClass' for '$router' registered")
+        case None =>
+      }
+
+      val wakeUpMessages = msg.resolver.wakeUpBy()
+      wakeUpMessages foreach { m =>
+        val wakeUpClass = m.asInstanceOf[Class[_ <: WakeUp]]
+        val seq : Seq[ActorRef] = wakeUps.getOrElse[Seq[ActorRef]](wakeUpClass, Seq.empty).filterNot(r => r == router) :+ router
+        val pair = wakeUpClass -> seq
+        wakeUps = wakeUps - wakeUpClass + pair
+        log.debug(s"wakeup '$wakeUpClass' for '$router' registered")
+      }
+
+      router.ask(UpdateHandlers(handlers))(timeout.duration) onComplete {
+        case scala.util.Success(results) =>
+          booting = booting.filterNot(_ == router)
+          router.tell(GetSubscribedDomainEvents, s)
+          log.debug(s"saga $router registered")
+
+          context.unbecome()
+          unstashAll()
+
+        case scala.util.Failure(failure) =>
+          registerMessages -= router
+          booting = booting.filterNot(_ == router)
+          context.unwatch(router)
+          routers = routers.filterNot(_._2 == router).toMap
+          wakeUps = wakeUps.filterNot(_._2 == router).toMap
+          activates = activates.filterNot(_._2 == router).toMap
+
+          s ! akka.actor.Status.Failure(RegisterSagaFailure(msg, failure))
+          log.warning(s"cannot register saga $msg due to $failure")
+
+          context.unbecome()
+          unstashAll()
+
+      }
+    case m: Message =>
+      log.debug(s"stashing message $m during registering")
+      stash()
+  }
+
+    override def postStop() = {
+    super.postStop()
+    registerMessages.keys.foreach(context.unwatch)
+  }
+
+  var shutdownRequestedBy = ActorRef.noSender
+  def shutdownInProgress: Receive = {
+    case Terminated(actor) =>
+      registerMessages -= actor
+      if (registerMessages.isEmpty) {
+        context.stop(self)
+        shutdownRequestedBy ! ShutdownActorCompleted(self)
+      }
   }
 }
