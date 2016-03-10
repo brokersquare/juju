@@ -1,7 +1,7 @@
 import sbt._
 
 object Versions {
-  val Juju = "0.1.0-SNAPSHOT"
+  val Juju = "0.1.0-ALPHA"
   val KafkaPersistence  = "7b35f752a9"
   val Scala             = "2.11.7"
   val Akka              = "2.4.1"
