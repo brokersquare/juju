@@ -16,7 +16,7 @@ object KafkaDomainSpec {
 
 }
 
-abstract class KafkaDomainSpec (test: String, zookeeperPort: Int, _config: Config = ConfigFactory.load("kafka.conf"))
+abstract class KafkaDomainSpec (val test: String, zookeeperPort: Int, _config: Config = ConfigFactory.load("kafka.conf"))
   extends {
   override val config : Config = ConfigFactory
     .parseString(s"test-server.zookeeper.port=$zookeeperPort")

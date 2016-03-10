@@ -45,7 +45,7 @@ object ClusterDomainSpec {
   }
 }
 
-abstract class ClusterDomainSpec (test: String, _config: Config = ClusterDomainSpec.clusterConfig, ports:Seq[String] = Seq("0"))
+abstract class ClusterDomainSpec (val test: String, _config: Config = ClusterDomainSpec.clusterConfig, ports:Seq[String] = Seq("0"))
   extends {
     val seedPort: Int = ClusterDomainSpec.getAvailablePort
     val servers = (Seq(seedPort.toString) ++ ports) map { port => ClusterDomainSpec.createSystem(seedPort.toString, port, _config) }
