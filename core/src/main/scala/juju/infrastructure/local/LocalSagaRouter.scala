@@ -66,6 +66,7 @@ class LocalSagaRouter[S <: Saga](tenant: String)(implicit ct: ClassTag[S], handl
 
   override def receive: Receive = {
     case e@GetSubscribedDomainEvents => sender ! DomainEventsSubscribed(subscribedEvents)
+
     case e : Activate =>
       val s = sender()
       log.debug(s"received activate $e message")
