@@ -5,7 +5,7 @@ import juju.domain.AggregateRoot.{CommandReceiveFailure, CommandReceived, Aggreg
 import juju.domain._
 import juju.domain.resolvers.ByConventionsSpec._
 import juju.messages.Activate
-import juju.sample.AveragePersonWeightSaga.{PublishAverageWeight, PublishWakeUp, PublishRequested}
+import juju.sample.{PublishAverageWeight, PublishWakeUp, PublishRequested}
 import juju.sample.PersonAggregate._
 import juju.sample.PriorityAggregate.{CreatePriority, PriorityCreated}
 import juju.sample._

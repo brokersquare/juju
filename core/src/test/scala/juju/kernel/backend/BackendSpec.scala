@@ -1,22 +1,19 @@
-package juju.juju.kernel.backend
-
+package juju.kernel.backend
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.pattern.gracefulStop
 import akka.testkit.TestProbe
 import juju.domain.AggregateRoot.AggregateIdResolution
 import juju.domain.Saga.{SagaCorrelationIdResolution, SagaHandlersResolution}
 import juju.domain.resolvers.ByConventionsSpec.AggregateWithInvalidHandleAnnotation
-import juju.domain.{SagaFactory, Saga, AggregateRoot, AggregateRootFactory}
+import juju.domain.{AggregateRoot, AggregateRootFactory, Saga, SagaFactory}
 import juju.infrastructure.local.LocalNode
-import juju.infrastructure.{SagaRouterFactory, OfficeFactory, UpdateHandlers}
-import juju.kernel.backend.{Backend, DefaultBackendConfig}
+import juju.infrastructure.{OfficeFactory, SagaRouterFactory, UpdateHandlers}
 import juju.messages.{Boot, SystemIsUp}
 import juju.sample.{AveragePersonWeightSaga, PersonAggregate}
 import juju.testkit.LocalDomainSpec
 
 import scala.reflect.ClassTag
-
-
 
 abstract class BaseBackend(_appname: String) extends Backend with LocalNode with DefaultBackendConfig {
   override def appname: String = _appname
@@ -31,8 +28,8 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
       }), "b1")
       probe.send(backend, Boot)
       probe.expectMsg(timeout.duration, SystemIsUp("fakebackend"))
+      gracefulStop(backend, timeout.duration * 2, juju.messages.ShutdownActor)
     }
-
 
     it should "boot backend when all registration completed successful" in {
       class PersonAggregateExtended extends PersonAggregate  {}
@@ -47,6 +44,8 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
       }), "b2")
       probe.send(backend, Boot)
       probe.expectMsg(timeout.duration, SystemIsUp("fakebackend"))
+
+      gracefulStop(backend, timeout.duration * 2, juju.messages.ShutdownActor)
     }
 
     it should "fails if at least an aggregate registration fails" in {
@@ -77,6 +76,8 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
       probe.expectMsgPF(timeout.duration) {
         case akka.actor.Status.Failure(_) =>
       }
+
+      gracefulStop(backend, timeout.duration * 2, juju.messages.ShutdownActor)
     }
 
     it should "fails if at least a saga registration fails" in {
@@ -107,6 +108,8 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
       probe.expectMsgPF(timeout.duration) {
         case akka.actor.Status.Failure(_) =>
       }
+
+      gracefulStop(backend, timeout.duration * 2, juju.messages.ShutdownActor)
     }
 
     it should "fails if more aggregate and saga registration fails" in {
@@ -153,6 +156,8 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
       probe.expectMsgPF(timeout.duration) {
         case akka.actor.Status.Failure(_) =>
       }
+
+      gracefulStop(backend, timeout.duration * 2, juju.messages.ShutdownActor)
     }
 
 
@@ -186,5 +191,8 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
     }), "b6")
     probe.send(backend, Boot)
     probe.expectMsg(timeout.duration, SystemIsUp("fakebackend"))
+
+    gracefulStop(backend, timeout.duration * 2, juju.messages.ShutdownActor)
   }
+
 }

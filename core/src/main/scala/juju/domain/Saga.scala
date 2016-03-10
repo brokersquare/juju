@@ -1,16 +1,16 @@
 package juju.domain
 
 import java.lang.reflect.Method
+import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorLogging, ActorRef, Props}
 import akka.pattern.ask
 import akka.persistence.{PersistentActor, RecoveryCompleted}
+import akka.util.Timeout
 import juju.messages.{Activate, Command, DomainEvent, WakeUp}
 
 import scala.annotation.tailrec
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
-import scala.concurrent.duration._
 
 abstract class SagaFactory[S<: Saga] {
   def props(correlationId: String, bus: ActorRef) : Props
@@ -85,9 +85,12 @@ trait Saga extends PersistentActor with ActorLogging {
 
 
   protected def deliverCommand(commandRouter: ActorRef, command: Command): Future[Any] = {
+    implicit val ec = context.system.dispatcher
+    implicit val timeout = Timeout(context.system.settings.config.getDuration("juju.eventbus.timeout", TimeUnit.SECONDS), TimeUnit.SECONDS)
+
     if (!recoveryRunning) {
       log.debug(s"delivery command '$command'")
-      commandRouter.ask(command)(60 seconds) //TODO: make timeout as parameter (implicit?)
+      commandRouter.ask(command)(timeout)
     } else {
       Future(None)
     }

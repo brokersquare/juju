@@ -105,7 +105,12 @@ object ClusterSagaRouter {
 
 class ClusterSagaProxy[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String, routerName: String) extends Actor with ActorLogging with Stash {
   import ClusterSagaRouter._
-  val system = context.system
+  import akka.pattern.{ask, pipe}
+
+  private val system = context.system
+  implicit val ec = system.dispatcher
+  implicit val timeout = Timeout(context.system.settings.config.getDuration("juju.eventbus.timeout", TimeUnit.SECONDS), TimeUnit.SECONDS)
+
   var handlers = Map[Class[_ <: Command], ActorRef]()
   val subscribedEvents = implicitly[SagaHandlersResolution[S]].resolve()
   val region = getOrCreateRegion(system, s"${routerName}Router", routerProps(tenant), routerMessageExtractor[S]())
@@ -120,7 +125,8 @@ class ClusterSagaProxy[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorre
       region ! UpdateHandlers(h)
       context.become(handlerUpdating)
     case m =>
-      region ! m
+      val s = sender()
+      region.ask(m)(timeout.duration).pipeTo(s)
   }
 
   def handlerUpdating: Actor.Receive = {
@@ -137,6 +143,11 @@ class ClusterSagaProxy[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorre
 class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String) extends Actor with ActorLogging with Stash {
   import ClusterSagaRouter._
   import EventBus._
+  import akka.pattern.ask
+
+  private val system = context.system
+  implicit val ec = system.dispatcher
+  implicit val timeout = Timeout(context.system.settings.config.getDuration("juju.eventbus.timeout", TimeUnit.SECONDS), TimeUnit.SECONDS)
 
   val address = Serialization.serializedActorPath(self)
   val mediator = DistributedPubSub(context.system).mediator
@@ -187,8 +198,13 @@ class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorr
     case wakeup : WakeUp =>
       val topic = nameWithTenant(tenant, wakeup.getClass)
       mediator ! Publish(topic, wakeup)
+      sender() ! akka.actor.Status.Success(wakeup)
     case activate : Activate =>
-      gatewayRegion ! activate
+      val s = sender()
+      gatewayRegion.ask(activate)(timeout.duration).onComplete {
+        case scala.util.Success(_) => s ! akka.actor.Status.Success(activate)
+        case scala.util.Failure(cause) => s ! akka.actor.Status.Failure(cause)
+      }
 
     case _ =>
   }
@@ -281,7 +297,7 @@ class ClusterSagaRouterDispatcher[S <: Saga : ClassTag : SagaHandlersResolution]
 }
 
 
-class ClusterSagaRouterGateway[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String, sagaRouterRef: ActorRef) extends Actor with ActorLogging with Stash {
+class ClusterSagaRouterGateway[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String, sagaRouter: ActorRef) extends Actor with ActorLogging with Stash {
   import ClusterSagaRouter._
   import EventBus._
 
@@ -289,12 +305,12 @@ class ClusterSagaRouterGateway[S <: Saga : ClassTag : SagaHandlersResolution : S
   val address = Serialization.serializedActorPath(self)
   val mediator = DistributedPubSub(context.system).mediator
   val correlationId = self.path.name
-  val sagaRef = context.actorOf(implicitly[SagaFactory[S]].props(correlationId, self), s"${sagaName[S]()}_$correlationId")
+  val saga = context.actorOf(implicitly[SagaFactory[S]].props(correlationId, self), s"${sagaName[S]()}_$correlationId")
 
   log.info(s"[$tenant]cluster saga router gateway $sagaType - $correlationId created at $address")
 
   var commandHandlers : Map[Class[_ <: Command], ActorRef] = Map.empty
-  sagaRouterRef ! RequestUpdateHandlers
+  sagaRouter ! RequestUpdateHandlers
 
   var subscriptionsAckWaitingList =
     implicitly[SagaHandlersResolution[S]].wakeUpBy().map { clazz =>
@@ -343,14 +359,15 @@ class ClusterSagaRouterGateway[S <: Saga : ClassTag : SagaHandlersResolution : S
 
     case activate: Activate =>
       log.debug(s"received $activate message")
+      sender() ! akka.actor.Status.Success(activate)
 
     case event: DomainEvent => {
       log.debug(s"[$tenant]received Event $event")
-      sagaRef ! event
+      saga ! event
     }
 
     case wakeup: WakeUp => {
-      sagaRef ! wakeup
+      saga ! wakeup
     }
   }
   

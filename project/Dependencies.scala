@@ -10,9 +10,7 @@ object Versions {
   val ScalaLogging      = "3.1.0"
   val ReactiveX         = "0.25.1"
   val SprayJson         = "1.3.2"
-
-  val Kamon             = "0.5.2"
-
+  
   val CommonIO          = "2.4"
   val Curator           = "2.7.1"
   val ScalaTest         = "2.2.4"
@@ -40,13 +38,6 @@ object Dependencies {
     val akkaHttpJson        = "com.typesafe.akka" %% "akka-http-spray-json-experimental" % AkkaHttp
     val akkaHttpTestKit     = "com.typesafe.akka" %% "akka-http-testkit-experimental" % AkkaHttp
 
-    val kamonCore           = "io.kamon" %% "kamon-core" % Kamon
-    val kamonScala          = "io.kamon" %% "kamon-scala" % Kamon
-    val kamonAkka           = "io.kamon" %% "kamon-akka" % Kamon
-    val kamonSystemMetrics  = "io.kamon" %% "kamon-system-metrics" % Kamon
-    val kamonStatsd         = "io.kamon" %% "kamon-statsd" % Kamon
-    val kamonLogReporter    = "io.kamon" %% "kamon-log-reporter" % Kamon
-
     val scalaReflect        = "org.scala-lang" % "scala-reflect" % Scala intransitive()
     val scalaTest           = "org.scalatest" %% "scalatest" % ScalaTest % "test"
     val akkaTestkit         = "com.typesafe.akka" %% "akka-testkit" % Akka % "test"
@@ -60,5 +51,4 @@ object Dependencies {
   val jujuCluster = Seq(akkaRemote, akkaCluster, akkaClusterSharding, akkaClusteTools, akkaContrib, akkaDistData)
   val jujuHttp = Seq(akkaHttp, akkaHttpCore, akkaHttpJson, akkaHttpTestKit, reactivex)
   val jujuKafka = Seq(kafkaPersistence, commonIO, curator)
-  val jujuMetrics = Seq(kamonCore, kamonAkka, kamonScala, kamonSystemMetrics, kamonLogReporter, kamonStatsd)
 }
