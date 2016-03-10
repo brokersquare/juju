@@ -17,6 +17,8 @@ trait AkkaSpec extends TestKitBase
   val config : Config
   implicit val system : ActorSystem
 
+  val test: String
+
   override def beforeAll() = {
     System.setProperty("java.net.preferIPv4Stack", "true") //TODO: move property declaration to the build.sbt
   }
