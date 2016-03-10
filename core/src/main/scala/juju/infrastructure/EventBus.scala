@@ -106,8 +106,8 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
       log.debug(s"sending wakeup $wakeUp requested")
       val wakeUpClass = wakeUp.getClass
       wakeUps.get(wakeUpClass) match {
-        case Some(destRefs) =>
-          val futures = context.children map { d =>
+        case Some(dests) =>
+          val futures = dests map { d =>
             log.debug(s"sending wake up event $wakeUp to $d")
             d.ask(wakeUp)(timeout.duration, s)
           }
@@ -132,7 +132,7 @@ class EventBus(tenant: String) extends Actor with ActorLogging with Stash {
     case msg : RegisterSaga[s] =>
       context.become(registering)
       self.forward(msg)
-      
+
     case ShutdownActor =>
       shutdownRequestedBy = sender()
       if (registerMessages.isEmpty) {
