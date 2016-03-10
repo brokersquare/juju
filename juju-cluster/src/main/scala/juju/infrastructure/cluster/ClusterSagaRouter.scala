@@ -296,7 +296,7 @@ class ClusterSagaRouterDispatcher[S <: Saga : ClassTag : SagaHandlersResolution]
 }
 
 
-class ClusterSagaRouterGateway[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String, sagaRouterRef: ActorRef) extends Actor with ActorLogging with Stash {
+class ClusterSagaRouterGateway[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String, sagaRouter: ActorRef) extends Actor with ActorLogging with Stash {
   import ClusterSagaRouter._
   import EventBus._
 
@@ -304,12 +304,12 @@ class ClusterSagaRouterGateway[S <: Saga : ClassTag : SagaHandlersResolution : S
   val address = Serialization.serializedActorPath(self)
   val mediator = DistributedPubSub(context.system).mediator
   val correlationId = self.path.name
-  val sagaRef = context.actorOf(implicitly[SagaFactory[S]].props(correlationId, self), s"${sagaName[S]()}_$correlationId")
+  val saga = context.actorOf(implicitly[SagaFactory[S]].props(correlationId, self), s"${sagaName[S]()}_$correlationId")
 
   log.info(s"[$tenant]cluster saga router gateway $sagaType - $correlationId created at $address")
 
   var commandHandlers : Map[Class[_ <: Command], ActorRef] = Map.empty
-  sagaRouterRef ! RequestUpdateHandlers
+  sagaRouter ! RequestUpdateHandlers
 
   var subscriptionsAckWaitingList =
     implicitly[SagaHandlersResolution[S]].wakeUpBy().map { clazz =>
@@ -362,11 +362,11 @@ class ClusterSagaRouterGateway[S <: Saga : ClassTag : SagaHandlersResolution : S
 
     case event: DomainEvent => {
       log.debug(s"[$tenant]received Event $event")
-      sagaRef ! event
+      saga ! event
     }
 
     case wakeup: WakeUp => {
-      sagaRef ! wakeup
+      saga ! wakeup
     }
   }
   
