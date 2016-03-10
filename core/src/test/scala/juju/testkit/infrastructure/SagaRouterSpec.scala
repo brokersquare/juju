@@ -72,7 +72,7 @@ trait SagaRouterSpec extends AkkaSpec {
   it should "route wakeup event to all saga if registered" in {
     val probe = TestProbe()
 
-    probe.ignoreNoMsg()
+    probe.ignoreMsg {case _: EchoWakeUp => true}
 
     val tenant = "T3"
     val routerRef = createSagaRouter[PriorityActivitiesSaga](tenant, probe)
@@ -99,6 +99,7 @@ trait SagaRouterSpec extends AkkaSpec {
     probe.ignoreNoMsg()
     probe.ignoreMsg {
       case _: PriorityActivitiesActivate => true
+      case _: EchoWakeUp => true
       case _: akka.actor.Status.Success => true
     }
 

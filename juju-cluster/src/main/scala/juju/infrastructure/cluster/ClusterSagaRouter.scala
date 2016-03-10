@@ -198,6 +198,7 @@ class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorr
     case wakeup : WakeUp =>
       val topic = nameWithTenant(tenant, wakeup.getClass)
       mediator ! Publish(topic, wakeup)
+      sender() ! akka.actor.Status.Success(wakeup)
     case activate : Activate =>
       val s = sender()
       gatewayRegion.ask(activate)(timeout.duration).onComplete {
