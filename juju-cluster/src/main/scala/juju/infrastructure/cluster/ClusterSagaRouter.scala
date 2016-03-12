@@ -27,6 +27,7 @@ object ClusterSagaRouter {
   case object ShutdownSagaRouter extends InfrastructureMessage
   case class SagaRouterStopped(sagaType: String) extends InfrastructureMessage
   case class InitializeDispatcher(index: Int) extends InfrastructureMessage
+  case class BindToAllDomainEvent(event: DomainEvent) extends InfrastructureMessage
 
   implicit def clusterSagaRouterFactory[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](_tenant: String)(implicit system: ActorSystem) = new SagaRouterFactory[S] {
     override val tenant :String = _tenant
@@ -62,7 +63,7 @@ object ClusterSagaRouter {
   def sagaName[S <: Saga : ClassTag]() = implicitly[ClassTag[S]].runtimeClass.getSimpleName
 
   def routerProps[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String) = Props(new ClusterSagaRouter[S](tenant))
-  def dispatcherProps[S <: Saga : ClassTag: SagaHandlersResolution](tenant: String) = Props(new ClusterSagaRouterDispatcher[S](tenant))
+  def dispatcherProps[S <: Saga : ClassTag: SagaHandlersResolution : SagaCorrelationIdResolution](tenant: String) = Props(new ClusterSagaRouterDispatcher[S](tenant))
   def gatewayProps[S <: Saga : ClassTag: SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](tenant: String, sagaRouterRef: ActorRef) = Props(new ClusterSagaRouterGateway[S](tenant, sagaRouterRef))
 
   def routerMessageExtractor[S <: Saga : ClassTag]() = new MessageExtractor {
@@ -235,7 +236,7 @@ class ClusterSagaRouter[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorr
   }
 }
 
-class ClusterSagaRouterDispatcher[S <: Saga : ClassTag : SagaHandlersResolution](tenant: String) extends Actor with ActorLogging with Stash {
+class ClusterSagaRouterDispatcher[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution](tenant: String) extends Actor with ActorLogging with Stash {
   import ClusterSagaRouter._
   import EventBus._
 
@@ -243,6 +244,7 @@ class ClusterSagaRouterDispatcher[S <: Saga : ClassTag : SagaHandlersResolution]
   val address = Serialization.serializedActorPath(self)
   val mediator = DistributedPubSub(context.system).mediator
   val handlersResolution = implicitly[SagaHandlersResolution[S]]
+  val correlationIdResolution = implicitly[SagaCorrelationIdResolution[S]]
 
   log.info(s"[$tenant]cluster saga router dispatcher $index created at $address")
   val subscriptionGroup = sagaName[S]()
@@ -277,9 +279,14 @@ class ClusterSagaRouterDispatcher[S <: Saga : ClassTag : SagaHandlersResolution]
   }
 
   override def receive: Actor.Receive = {
-    case event : DomainEvent =>
-      log.info(s"[$tenant]saga dispatcher $index received event $event!")
+    case event : DomainEvent if correlationIdResolution.resolve(event).matchOne =>
+      log.debug(s"[$tenant]saga dispatcher $index received event $event!")
       sagaRegion ! event
+
+    case event : DomainEvent if correlationIdResolution.resolve(event).matchAll =>
+      val topic = EventBus.nameWithTenant(tenant, "bindAll_" + event.getClass.getSimpleName)
+      log.debug(s"[$tenant]saga dispatcher $index received event $event and publish to topic $topic")
+      mediator ! Publish(topic, BindToAllDomainEvent(event))
     case _ =>
   }
 
@@ -312,19 +319,29 @@ class ClusterSagaRouterGateway[S <: Saga : ClassTag : SagaHandlersResolution : S
   var commandHandlers : Map[Class[_ <: Command], ActorRef] = Map.empty
   sagaRouter ! RequestUpdateHandlers
 
-  var subscriptionsAckWaitingList =
-    implicitly[SagaHandlersResolution[S]].wakeUpBy().map { clazz =>
+  val handlersResolution = implicitly[SagaHandlersResolution[S]]
+
+  var wakeUpsSubscriptionsAckWaitingList =
+    handlersResolution.wakeUpBy().map { clazz =>
       Subscribe(nameWithTenant(tenant, clazz), self)
     }.toList.::(Subscribe(nameWithTenant(tenant, classOf[UpdateHandlers]), self))
 
-  subscriptionsAckWaitingList.foreach(s => mediator ! s)
+  var bindAllAckWaitingList = handlersResolution.resolve() map {e =>
+    val topic = nameWithTenant(tenant, "bindAll_" + e.getSimpleName)
+    Subscribe(topic, None, self)
+  }
+
+  (wakeUpsSubscriptionsAckWaitingList ++ bindAllAckWaitingList).foreach(s => mediator ! s)
   context.become(waitForSubscribeAck)
 
   def waitForSubscribeAck: Actor.Receive = {
-    case SubscribeAck(s) => 
-      subscriptionsAckWaitingList = subscriptionsAckWaitingList.filterNot(_ == s)
-      subscriptionsAckWaitingList match {
-        case Nil =>
+    case SubscribeAck(s) =>
+      log.debug(s"[$tenant]cluster saga router gateway $sagaType - $correlationId received subscribtion $s")
+      bindAllAckWaitingList = bindAllAckWaitingList.filterNot(_ == s)
+      wakeUpsSubscriptionsAckWaitingList = wakeUpsSubscriptionsAckWaitingList.filterNot(_ == s)
+      wakeUpsSubscriptionsAckWaitingList match {
+        case Nil if bindAllAckWaitingList.isEmpty =>
+          log.info(s"[$tenant]cluster saga router gateway $sagaType - $correlationId subscription completed")
           mediator ! Publish(nameWithTenant(tenant, classOf[SagaIsUp]), SagaIsUp(sagaType, self, tenant, correlationId))
           context.unbecome()
           context.become(waitUpdateHandlers)
@@ -366,6 +383,11 @@ class ClusterSagaRouterGateway[S <: Saga : ClassTag : SagaHandlersResolution : S
       saga ! event
     }
 
+    case BindToAllDomainEvent(event) => {
+      log.debug(s"[$tenant]received Event $event bound to all")
+      saga ! event
+    }
+
     case wakeup: WakeUp => {
       saga ! wakeup
     }
@@ -377,6 +399,11 @@ class ClusterSagaRouterGateway[S <: Saga : ClassTag : SagaHandlersResolution : S
 
     implicitly[SagaHandlersResolution[S]].wakeUpBy() foreach { clazz =>
       mediator ! Unsubscribe(nameWithTenant(tenant, clazz), self)
+    }
+
+    implicitly[SagaHandlersResolution[S]].resolve() foreach { clazz =>
+      val topic = nameWithTenant(tenant, "bindAll_" + clazz.getSimpleName)
+      mediator ! Unsubscribe(topic, None, self)
     }
   }
 

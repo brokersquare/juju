@@ -17,22 +17,25 @@ abstract class SagaFactory[S<: Saga] {
 }
 
 sealed abstract class Correlate[+A] extends Product with Serializable {
-  def isEmpty = false
-  def isAll = false
+  def matchAll = false
+  def matchOne = false
+  def matchNone = false
   def get: A
-  def isDefined: Boolean = !isEmpty
+  def isDefined: Boolean = !matchNone
 }
 
 final case class CorrelateOne[+A](x: A) extends Correlate[A] {
+  override def matchOne = true
   def get = x
 }
 
 case object CorrelateAll extends Correlate[Nothing] {
+  override def matchAll = true
   def get = throw new NoSuchElementException("CorrelateAll.get")
 }
 
 case object CorrelateNothing extends Correlate[Nothing] {
-  override def isEmpty = true
+  override def matchNone = true
   def get = throw new NoSuchElementException("CorrelateNothing.get")
 }
 
