@@ -5,7 +5,7 @@ lazy val defaultSettings =
         organization := "com.brokersquare",
         version := Versions.Juju,
         scalaVersion := Versions.Scala,
-        scalacOptions:= Seq("-language:postfixOps", "-feature", "-deprecation", "-language:implicitConversions"),
+        scalacOptions:= Seq("-language:postfixOps", "-feature", "-deprecation", "-language:implicitConversions", "-language:existentials"),
         resolvers ++= Seq(
           "jitpack" at "https://jitpack.io",
           "spray repo" at "http://repo.spray.io",
