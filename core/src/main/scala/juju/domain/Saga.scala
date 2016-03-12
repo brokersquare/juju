@@ -16,12 +16,32 @@ abstract class SagaFactory[S<: Saga] {
   def props(correlationId: String, bus: ActorRef) : Props
 }
 
+sealed abstract class Correlate[+A] extends Product with Serializable {
+  def isEmpty = false
+  def isAll = false
+  def get: A
+  def isDefined: Boolean = !isEmpty
+}
+
+final case class CorrelateOne[+A](x: A) extends Correlate[A] {
+  def get = x
+}
+
+case object CorrelateAll extends Correlate[Nothing] {
+  def get = throw new NoSuchElementException("CorrelateAll.get")
+}
+
+case object CorrelateNothing extends Correlate[Nothing] {
+  override def isEmpty = true
+  def get = throw new NoSuchElementException("CorrelateNothing.get")
+}
+
 object Saga {
   trait SagaCorrelationIdResolution[S <: Saga] {
     /**
-     * resolve returns an error if the event haven't to be handled (signal a wrong routing logic) otherwise returns None if a handled event has specific condition, otherwise it returns the correlationid
+     * resolve returns an error if the event haven't to be handled (signal a wrong routing logic) otherwise returns CorrelateNothing if a handled event has specific condition, CorrelateAll if handled all saga instances, otherwise it returns the correlationid
      */
-    def resolve(event: DomainEvent) : Option[String]
+    def resolve(event: DomainEvent) : Correlate[String]
   }
 
   trait SagaHandlersResolution[S <: Saga] {
@@ -40,17 +60,6 @@ trait Saga extends PersistentActor with ActorLogging {
   log.debug(s"created Saga ${this.getClass.getCanonicalName} with id $sagaId")
   override def persistenceId: String = sagaId
 
-  /*
-  private lazy val appliers = this.getClass.getDeclaredMethods
-    .filter(_.getParameterTypes.length == 1)
-    .filter( _.getName == "apply")
-    .filter(_.getParameterTypes.head != classOf[DomainEvent])
-
-  private lazy val wakeups = this.getClass.getDeclaredMethods
-    .filter(_.getParameterTypes.length == 1)
-    .filter( _.getName == "wakeup")
-    .filter(_.getParameterTypes.head != classOf[WakeUp])
-*/
   private lazy val appliers = getMethods("apply", classOf[DomainEvent])
   private lazy val wakeups = getMethods("wakeup", classOf[WakeUp])
 

@@ -91,11 +91,16 @@ class LocalSagaRouter[S <: Saga](tenant: String)(implicit ct: ClassTag[S], handl
 
     case e : DomainEvent =>
       idResolver resolve e match {
-        case Some(correlationId) =>
+        case CorrelateOne(correlationId) =>
           log.debug(s"received domain event '$e' with correlation '$correlationId'")
           val sagaRef = getOrCreateSaga(correlationId)
           sagaRef ! e
-        case None =>
+        case CorrelateAll =>
+          log.debug(s"received domain event '$e' to be notify to all saga instances")
+          context.children foreach  { child =>
+
+          }
+        case CorrelateNothing =>
       }
 
     case c : Command =>
