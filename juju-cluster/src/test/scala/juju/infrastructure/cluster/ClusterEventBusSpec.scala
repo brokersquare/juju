@@ -1,9 +1,10 @@
 package juju.infrastructure.cluster
 
-import akka.actor.{ActorRef, PoisonPill}
+import akka.actor.ActorRef
 import akka.cluster.pubsub.DistributedPubSub
 import akka.cluster.pubsub.DistributedPubSubMediator.{Subscribe, Unsubscribe}
 import juju.infrastructure.EventBus
+import juju.messages.ShutdownActor
 import juju.testkit.ClusterDomainSpec
 import juju.testkit.infrastructure.EventBusSpec
 
@@ -26,7 +27,7 @@ class ClusterEventBusSpec extends ClusterDomainSpec("ClusterEventBus") with Even
         mediator ! Unsubscribe(EventBus.nameWithTenant(tenant, e), None, subscriber)
       }
 
-      if (bus != null) bus ! PoisonPill
+      if (bus != null) bus ! ShutdownActor
     }
   }
 }
