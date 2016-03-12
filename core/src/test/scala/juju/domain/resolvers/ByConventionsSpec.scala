@@ -3,6 +3,7 @@ package juju.domain.resolvers
 import akka.actor.ActorRef
 import juju.domain.AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution, CommandReceiveFailure, CommandReceived}
 import juju.domain._
+import juju.domain.resolvers.ByConventions.BothCorrelationIdAndBindAllException
 import juju.domain.resolvers.ByConventionsSpec._
 import juju.messages.Activate
 import juju.sample.PersonAggregate._
@@ -175,6 +176,20 @@ class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
     correlationId.get shouldBe "giangi"
   }
 
+  it should "bindAll from command using byConvention resolver" in {
+    val correlationId = ByConventions.correlationIdResolution[SagaWithBindAllAnnotation]().resolve(WeightChanged("giangi", 80))
+    correlationId shouldBe CorrelateAll
+  }
+
+  it should "correlateNothing from command using byConvention resolver" in {
+    val correlationId = ByConventions.correlationIdResolution[SagaWithBindAllAnnotation]().resolve(HeightChanged("giangi", 180))
+    correlationId shouldBe CorrelateNothing
+  }
+
+  it should "throw error if byConvention resolver find both BindAll and CorrelationIdField annotations" in {
+    the[BothCorrelationIdAndBindAllException] thrownBy {
+      ByConventions.correlationIdResolution[SagaWithBothBindAllAndCorrelationIdFieldAnnotations]().resolve(WeightChanged("giangi", 80))
+    } should have message "Saga 'SagaWithBothBindAllAndCorrelationIdFieldAnnotations' specifies both BindAll and CorrelationIdField annotations for event 'WeightChanged'"
   }
 
   it should "throw error if correlation id from command byConvention resolver doesn't exist" in {
@@ -230,6 +245,15 @@ object ByConventionsSpec {
   class SagaWithInvalidApplyAnnotation extends Saga {
     @CorrelationIdField(fieldname = "notexistingfield")def apply(event: WeightChanged): Unit = ???
   }
+
+  class SagaWithBindAllAnnotation extends Saga {
+    @BindAll def apply(event: WeightChanged): Unit = ???
+  }
+
+  class SagaWithBothBindAllAndCorrelationIdFieldAnnotations extends Saga {
+    @BindAll @CorrelationIdField(fieldname = "name")def apply(event: WeightChanged): Unit = ???
+  }
+
   class SagaWithNoApplyAnnotation extends Saga {
     def apply(event: WeightChanged): Unit = ???
   }

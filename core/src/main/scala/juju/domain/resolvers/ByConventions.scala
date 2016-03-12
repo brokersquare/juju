@@ -6,7 +6,7 @@ import java.lang.reflect.Method
 import akka.actor.{ActorRef, Props}
 import juju.domain.AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution}
 import juju.domain.Saga.{SagaCorrelationIdResolution, SagaHandlersResolution}
-import juju.domain.{AggregateRoot, AggregateRootFactory, Saga, SagaFactory}
+import juju.domain._
 import juju.messages.{Activate, Command, DomainEvent, WakeUp}
 
 import scala.annotation.tailrec
@@ -15,6 +15,7 @@ import scala.reflect.runtime.{universe => ru}
 import scala.util.{Failure, Success, Try}
 
 object ByConventions {
+  case class BothCorrelationIdAndBindAllException(sagaClazz: Class[_ ], eventName: String) extends Exception(s"Saga '${sagaClazz.getSimpleName}' specifies both BindAll and CorrelationIdField annotations for event '$eventName'")
 
   private def getMethods[A : ClassTag](methodname: String) : Seq[Method] = {
     val clazz = implicitly[ClassTag[A]].runtimeClass
@@ -115,34 +116,64 @@ object ByConventions {
 
   implicit def correlationIdResolution[S <: Saga : ClassTag]() = new SagaCorrelationIdResolution[S] {
     /**
-     * resolve returns an error if the event haven't to be handled (signal a wrong routing logic) otherwise returns None if a handled event has specific condition, otherwise it returns the correlationid
+     * resolve returns an error if the event haven't to be handled (signal a wrong routing logic) otherwise returns NoCorrelation if a handled event has specific condition, CorrelateAll if handled all saga instances, otherwise it returns the correlationid
      */
-    override def resolve(event: DomainEvent): Option[String] = {
+    override def resolve(event: DomainEvent): Correlate[String] = {
       val sagaTypename = implicitly[ClassTag[S]].runtimeClass.getSimpleName
 
       val handlers = getMethods("apply")
       val eventClass = event.getClass
-      val handle = handlers.filter(_.getGenericParameterTypes.head == eventClass).head
-      val annotation = handle.getDeclaredAnnotation[CorrelationIdField](classOf[CorrelationIdField])
 
-      val fieldname = Option(annotation) match {
-        case None =>
-          val methodWithNameCorrelationId = eventClass.getMethods.find(_.getName == "CorrelationId")
-          val methodWithNameId = eventClass.getMethods.find(_.getName == "Id")
-          (methodWithNameCorrelationId getOrElse {
-            methodWithNameId getOrElse {
-              throw new IllegalArgumentException(s"Not provided CorrelationIdField annotation for event '${eventClass.getSimpleName}'. Please set annotation or specify a correlation id resolver for type '$sagaTypename'")
-            }
-          }).getName
-        case Some(a) => a.fieldname()
+      val handle = handlers.find(_.getGenericParameterTypes.head == eventClass)
+
+      handle match {
+        case None => CorrelateNothing
+
+        case Some(h) if hasBothAnnotations(h) =>
+          val sagaType = implicitly[ClassTag[S]].runtimeClass
+          throw new BothCorrelationIdAndBindAllException(sagaType, event.getClass.getSimpleName)
+
+        case Some(h) if hasBindAllAnnotations(h)=>
+          CorrelateAll
+
+        case Some(h) if hasCorrelationIdAnnotations(h)=>
+          val fieldAnnotation = h.getDeclaredAnnotation[CorrelationIdField](classOf[CorrelationIdField])
+
+          val fieldname = Option(fieldAnnotation) match {
+            case None =>
+              val methodWithNameCorrelationId = eventClass.getMethods.find(_.getName == "CorrelationId")
+              val methodWithNameId = eventClass.getMethods.find(_.getName == "Id")
+              (methodWithNameCorrelationId getOrElse {
+                methodWithNameId getOrElse {
+                  throw new IllegalArgumentException(s"Not provided CorrelationIdField annotation for event '${eventClass.getSimpleName}'. Please set annotation or specify a correlation id resolver for type '$sagaTypename'")
+                }
+              }).getName
+            case Some(a) => a.fieldname()
+          }
+
+          CorrelateOne(Try {
+            eventClass.getMethod(fieldname)
+          } match {
+            case Success(method) => method.invoke(event).asInstanceOf[String]
+            case Failure(e) => throw new NoSuchMethodError(s"Saga '$sagaTypename' specifies not existing Correlation id field '$fieldname' for event '${eventClass.getSimpleName}'")
+          })
       }
+    }
 
-      Some(Try {
-        eventClass.getMethod(fieldname)
-      } match {
-        case Success(method) => method.invoke(event).asInstanceOf[String]
-        case Failure(e) => throw new NoSuchMethodError(s"Saga '$sagaTypename' specifies not existing Correlation id field '$fieldname' for event '${eventClass.getSimpleName}'")
-      })
+    private def hasBothAnnotations(h: Method): Boolean = {
+      hasBindAllAnnotations(h) && hasCorrelationIdAnnotations(h)
+    }
+
+    private def hasBindAllAnnotations(h: Method): Boolean = {
+      h.getDeclaredAnnotations.map(_.annotationType()).filter { c =>
+        c == classOf[BindAll]
+      }.toSet.nonEmpty
+    }
+
+    private def hasCorrelationIdAnnotations(h: Method): Boolean = {
+      h.getDeclaredAnnotations.map(_.annotationType()).filter { c =>
+        c == classOf[CorrelationIdField]
+      }.toSet.nonEmpty
     }
   }
 }
