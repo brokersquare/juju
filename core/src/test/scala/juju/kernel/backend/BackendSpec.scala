@@ -31,6 +31,17 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
       gracefulStop(backend, timeout.duration * 2, juju.messages.ShutdownActor)
     }
 
+    it should "call afterBoot when the system is up" in {
+      case object Ready
+      val probe = TestProbe()
+      val backend = system.actorOf(Props(new BaseBackend("fakebackend") {
+        override def afterBoot() = probe.send(probe.ref, Ready)
+      }), "b2")
+      probe.send(backend, Boot)
+      probe.expectMsg(timeout.duration, Ready)
+      gracefulStop(backend, timeout.duration * 2, juju.messages.ShutdownActor)
+    }
+
     it should "boot backend when all registration completed successful" in {
       class PersonAggregateExtended extends PersonAggregate  {}
       class AveragePersonWeightSagaExtended(correlationId: String, commandRouter: ActorRef) extends AveragePersonWeightSaga(correlationId, commandRouter)  {}
@@ -41,7 +52,7 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
         registerAggregate[PersonAggregateExtended]()
         registerSaga[AveragePersonWeightSaga]()
         registerSaga[AveragePersonWeightSagaExtended]()
-      }), "b2")
+      }), "b3")
       probe.send(backend, Boot)
       probe.expectMsg(timeout.duration, SystemIsUp("fakebackend"))
 
@@ -55,7 +66,7 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
         override protected implicit def officeFactory[A <: AggregateRoot[_] : AggregateIdResolution : AggregateRootFactory : ClassTag](implicit system : ActorSystem): OfficeFactory[A] = {
           new OfficeFactory[A] {
             val aggregateName = implicitly[ClassTag[A]].runtimeClass.getSimpleName
-            override val tenant: String = "b3"
+            override val tenant: String = "b4"
 
             override def getOrCreate: ActorRef =system.actorOf(Props(new Actor {
               override def receive: Receive = {
@@ -71,7 +82,7 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
         registerAggregate[PersonAggregate]()
         registerAggregate[AggregateWithInvalidHandleAnnotation]()
         registerSaga[AveragePersonWeightSaga]()
-      }), "b3")
+      }), "b4")
       probe.send(backend, Boot)
       probe.expectMsgPF(timeout.duration) {
         case akka.actor.Status.Failure(_) =>
@@ -87,7 +98,7 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
       val backend = system.actorOf(Props(new BaseBackend("fakebackend") {
 
         override protected implicit def sagaRouterFactory[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](implicit system : ActorSystem): SagaRouterFactory[S] = new SagaRouterFactory[S] {
-          override val tenant: String = "b4"
+          override val tenant: String = "b5"
           val sagaName = implicitly[ClassTag[S]].runtimeClass.getSimpleName
 
           override def getOrCreate: ActorRef = system.actorOf(Props(new Actor {
@@ -103,7 +114,7 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
         registerAggregate[PersonAggregate]()
         registerSaga[AveragePersonWeightSaga]()
         registerSaga[AveragePersonWeightSagaExtended]()
-      }), "b4")
+      }), "b5")
       probe.send(backend, Boot)
       probe.expectMsgPF(timeout.duration) {
         case akka.actor.Status.Failure(_) =>
@@ -123,7 +134,7 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
         override protected implicit def officeFactory[A <: AggregateRoot[_] : AggregateIdResolution : AggregateRootFactory : ClassTag](implicit system : ActorSystem): OfficeFactory[A] = {
           new OfficeFactory[A] {
             val aggregateName = implicitly[ClassTag[A]].runtimeClass.getSimpleName
-            override val tenant: String = "b5"
+            override val tenant: String = "b6"
 
             override def getOrCreate: ActorRef =system.actorOf(Props(new Actor {
               override def receive: Receive = {
@@ -136,7 +147,7 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
 
 
         override protected implicit def sagaRouterFactory[S <: Saga : ClassTag : SagaHandlersResolution : SagaCorrelationIdResolution : SagaFactory](implicit system : ActorSystem): SagaRouterFactory[S] = new SagaRouterFactory[S] {
-          override val tenant: String = "b5"
+          override val tenant: String = "b6"
           val sagaName = implicitly[ClassTag[S]].runtimeClass.getSimpleName
 
           override def getOrCreate: ActorRef = system.actorOf(Props(new Actor {
@@ -151,7 +162,7 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
         registerAggregate[PersonAggregateExtended]()
         registerSaga[AveragePersonWeightSaga]()
         registerSaga[AveragePersonWeightSagaExtended]()
-      }), "b5")
+      }), "b6")
       probe.send(backend, Boot)
       probe.expectMsgPF(timeout.duration) {
         case akka.actor.Status.Failure(_) =>
@@ -172,7 +183,7 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
       override protected implicit def officeFactory[A <: AggregateRoot[_] : AggregateIdResolution : AggregateRootFactory : ClassTag](implicit system : ActorSystem): OfficeFactory[A] = {
         new OfficeFactory[A] {
           val aggregateName = implicitly[ClassTag[A]].runtimeClass.getSimpleName
-          override val tenant: String = "b6"
+          override val tenant: String = "b7"
           override def getOrCreate: ActorRef =system.actorOf(Props(new Actor {
             override def receive: Receive = {
               case UpdateHandlers(h) if fail  =>
@@ -188,11 +199,10 @@ class BackendSpec extends LocalDomainSpec("BackendSpec") {
       registerAggregate[PersonAggregateExtended]()
       registerSaga[AveragePersonWeightSaga]()
       registerSaga[AveragePersonWeightSagaExtended]()
-    }), "b6")
+    }), "b7")
     probe.send(backend, Boot)
     probe.expectMsg(timeout.duration, SystemIsUp("fakebackend"))
 
     gracefulStop(backend, timeout.duration * 2, juju.messages.ShutdownActor)
   }
-
 }

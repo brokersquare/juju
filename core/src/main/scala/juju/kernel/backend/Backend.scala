@@ -21,7 +21,7 @@ trait Backend extends Actor with ActorLogging with Stash with Node {
 
   implicit def system : ActorSystem = context.system
   implicit def dispatcher = system.dispatcher // The ExecutionContext that will be used
-
+  def afterBoot(): Unit = Unit
   def config = system.settings.config
   implicit lazy val timeout: akka.util.Timeout = config getDuration("juju.timeout",TimeUnit.SECONDS) seconds
 
@@ -70,6 +70,7 @@ trait Backend extends Actor with ActorLogging with Stash with Node {
           wakeups.toSet[ScheduleWakeUp].foreach(scheduler ! _)
 
           log.info(s"Backend $appname bootstrap succeeded")
+          afterBoot()
 
         case scala.util.Failure(cause) =>
           log.warning(s"Backend $appname bootstrap failed due to error: $cause")
