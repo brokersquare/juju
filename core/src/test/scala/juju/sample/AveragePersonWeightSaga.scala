@@ -2,13 +2,15 @@ package juju.sample
 
 import akka.actor.ActorRef
 import juju.domain.Saga
-import juju.domain.resolvers.ActivatedBy
+import juju.domain.resolvers.{BindAll, ActivatedBy}
 import juju.messages.{Activate, Command, DomainEvent, WakeUp}
 import juju.sample.PersonAggregate.WeightChanged
 
 case class AveragePersonWeightActivate(correlationId: String) extends Activate
 case class PublishWakeUp() extends WakeUp
 case class PublishAverageWeight(weight: Int) extends Command
+case class PublishHello(correlationId: String, text: String) extends Command
+@SerialVersionUID(1L) case class HelloRequested(text: String) extends DomainEvent
 @SerialVersionUID(1L) case class PublishRequested() extends DomainEvent
 
 
@@ -31,6 +33,8 @@ class AveragePersonWeightSaga(correlationId: String, commandRouter: ActorRef) ex
       changed = false
     }
 
+  @BindAll def apply(event: HelloRequested): Unit =
+    deliverCommand(commandRouter, PublishHello(correlationId, event.text))
 
   def wakeup(wakeup: PublishWakeUp): Unit = raise(PublishRequested())
 }

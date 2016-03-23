@@ -1,14 +1,14 @@
 package juju.domain.resolvers
 
 import akka.actor.ActorRef
-import juju.domain.AggregateRoot.{CommandReceiveFailure, CommandReceived, AggregateHandlersResolution, AggregateIdResolution}
+import juju.domain.AggregateRoot.{AggregateHandlersResolution, AggregateIdResolution, CommandReceiveFailure, CommandReceived}
 import juju.domain._
+import juju.domain.resolvers.ByConventions.BothCorrelationIdAndBindAllException
 import juju.domain.resolvers.ByConventionsSpec._
 import juju.messages.Activate
-import juju.sample.{PublishAverageWeight, PublishWakeUp, PublishRequested}
 import juju.sample.PersonAggregate._
 import juju.sample.PriorityAggregate.{CreatePriority, PriorityCreated}
-import juju.sample._
+import juju.sample.{PublishAverageWeight, PublishRequested, PublishWakeUp, _}
 import juju.testkit.LocalDomainSpec
 
 import scala.reflect.ClassTag
@@ -155,7 +155,6 @@ class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
     clazz should be(classOf[SagaActivate].getName)
   }
 
-
   it should "returns None if saga doesn't provide activate annotation" in {
     val supportedActivates = ByConventions.sagaHandlersResolution[SagaWithNoActivationAnnotation]().activateBy()
     supportedActivates should be(None)
@@ -173,14 +172,24 @@ class ByConventionsSpec extends LocalDomainSpec("ByConvention") {
 
   it should "extract correlation id from command using byConvention resolver" in {
     val correlationId = ByConventions.correlationIdResolution[SagaWithValidApplyAnnotation]().resolve(WeightChanged("giangi", 80))
-    correlationId should not be None
+    correlationId should not be CorrelateNothing
     correlationId.get shouldBe "giangi"
   }
 
-  it should "throw error if correlation id from command byConvention resolver doesn't find CorrelationIdField annotation" in {
-    the[IllegalArgumentException] thrownBy {
-      ByConventions.correlationIdResolution[SagaWithNoApplyAnnotation]().resolve(WeightChanged("giangi", 80))
-    } should have message "Not provided CorrelationIdField annotation for event 'WeightChanged'. Please set annotation or specify a correlation id resolver for type 'SagaWithNoApplyAnnotation'"
+  it should "bindAll from command using byConvention resolver" in {
+    val correlationId = ByConventions.correlationIdResolution[SagaWithBindAllAnnotation]().resolve(WeightChanged("giangi", 80))
+    correlationId shouldBe CorrelateAll
+  }
+
+  it should "correlateNothing from command using byConvention resolver" in {
+    val correlationId = ByConventions.correlationIdResolution[SagaWithBindAllAnnotation]().resolve(HeightChanged("giangi", 180))
+    correlationId shouldBe CorrelateNothing
+  }
+
+  it should "throw error if byConvention resolver find both BindAll and CorrelationIdField annotations" in {
+    the[BothCorrelationIdAndBindAllException] thrownBy {
+      ByConventions.correlationIdResolution[SagaWithBothBindAllAndCorrelationIdFieldAnnotations]().resolve(WeightChanged("giangi", 80))
+    } should have message "Saga 'SagaWithBothBindAllAndCorrelationIdFieldAnnotations' specifies both BindAll and CorrelationIdField annotations for event 'WeightChanged'"
   }
 
   it should "throw error if correlation id from command byConvention resolver doesn't exist" in {
@@ -236,6 +245,15 @@ object ByConventionsSpec {
   class SagaWithInvalidApplyAnnotation extends Saga {
     @CorrelationIdField(fieldname = "notexistingfield")def apply(event: WeightChanged): Unit = ???
   }
+
+  class SagaWithBindAllAnnotation extends Saga {
+    @BindAll def apply(event: WeightChanged): Unit = ???
+  }
+
+  class SagaWithBothBindAllAndCorrelationIdFieldAnnotations extends Saga {
+    @BindAll @CorrelationIdField(fieldname = "name")def apply(event: WeightChanged): Unit = ???
+  }
+
   class SagaWithNoApplyAnnotation extends Saga {
     def apply(event: WeightChanged): Unit = ???
   }

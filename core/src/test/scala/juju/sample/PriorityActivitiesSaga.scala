@@ -2,7 +2,7 @@ package juju.sample
 
 import akka.actor.{ActorRef, Props}
 import juju.domain.Saga.{SagaCorrelationIdResolution, SagaHandlersResolution}
-import juju.domain.{Saga, SagaFactory}
+import juju.domain._
 import juju.messages.{Activate, Command, DomainEvent, WakeUp}
 import juju.sample.ColorAggregate.ChangeHeavy
 import juju.sample.ColorPriorityAggregate.ColorAssigned
@@ -16,13 +16,13 @@ object PriorityActivitiesSaga {
   case class PublishEcho(message: String) extends Command
 
   implicit val correlationIdResolution = new SagaCorrelationIdResolution[PriorityActivitiesSaga] {
-    override def resolve(event: DomainEvent): Option[String] = event match {
-      case PriorityIncreased(_, p) if p == -1 => None
-      case PriorityIncreased(_, p) => Some(p.toString)
-      case PriorityDecreased(_, p) if p == -1  => None
-      case PriorityDecreased(_, p) => Some(p.toString)
-      case ColorAssigned(p, c) if p == -1  => None
-      case ColorAssigned(p, c) => Some(p.toString)
+    override def resolve(event: DomainEvent): Correlate[String] = event match {
+      case PriorityIncreased(_, p) if p == -1 => CorrelateNothing
+      case PriorityIncreased(_, p) => CorrelateOne(p.toString)
+      case PriorityDecreased(_, p) if p == -1  => CorrelateNothing
+      case PriorityDecreased(_, p) => CorrelateOne(p.toString)
+      case ColorAssigned(p, c) if p == -1  => CorrelateNothing
+      case ColorAssigned(p, c) => CorrelateOne(p.toString)
     }
   }
 
